@@ -1,0 +1,19 @@
+{
+  "name": "test-sheet",
+  "version": "1.0.0",
+  "description": "Structured Node Express ES6 Project",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "googleapis": "^171.0.0"
+  }
+}
