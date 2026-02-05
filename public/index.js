@@ -1,5 +1,6 @@
         let chart;
         let auditCharts = { accuracy: null, distribution: null };
+        let staffProductivityChart = null;
         let auditDiscrepancies = []; // Global to store raw discrepancy data
         let allData = [];
         let currentTab = 'inventory';
@@ -70,66 +71,59 @@
             document.getElementById('auditMatched').innerText = data.kpis.totalMatched.toLocaleString();
             document.getElementById('auditExtra').innerText = data.kpis.totalExtra.toLocaleString();
             document.getElementById('auditMissing').innerText = data.kpis.totalMissing.toLocaleString();
-
-            // Location Accuracy Chart
-            const locCtx = document.getElementById('locationAccuracyChart').getContext('2d');
-            if (auditCharts.accuracy) auditCharts.accuracy.destroy();
-            auditCharts.accuracy = new Chart(locCtx, {
-                type: 'bar',
-                data: {
-                    labels: data.chartData.locationAccuracy.labels,
-                    datasets: [{
-                        label: 'Accuracy %',
-                        data: data.chartData.locationAccuracy.datasets,
-                        backgroundColor: data.chartData.locationAccuracy.datasets.map(v => v > 90 ? '#10b981' : v > 80 ? '#3b82f6' : '#f59e0b'),
-                        borderRadius: 6
-                    }]
-                },
-                options: { 
-                    indexAxis: 'y', 
-                    responsive: true, 
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { x: { max: 100, beginAtZero: true } }
-                }
-            });
-
-            // Location Details Table
-            const locationTable = document.getElementById('locationDetailsTable');
-            const locationEntries = Object.entries(data.locationReport || {})
-                .sort((a, b) => b[1].accuracy - a[1].accuracy); // Sort by accuracy descending
             
-            locationTable.innerHTML = locationEntries.map(([name, loc]) => `
+            // Audit Counts
+            const matchedQty = data.kpis.physicalQtyMatched || 0;
+            const extraQty = data.kpis.physicalQtyExtra || 0;
+            const missingQty = data.kpis.physicalQtyMissing || 0;
+            const matchedPct = data.kpis.matchedPercentage || 0;
+            const extraPct = data.kpis.extraPercentage || 0;
+            const missingPct = data.kpis.missingPercentage || 0;
+
+            
+            document.getElementById('auditMatchedCount').innerText = matchedQty.toLocaleString();
+            document.getElementById('auditExtraCount').innerText = extraQty.toLocaleString();
+            document.getElementById('auditMissingCount').innerText = missingQty.toLocaleString();
+            
+            document.getElementById('auditMatchedPercentage').innerText = `${matchedPct.toFixed(1)}%`;
+            document.getElementById('auditExtraPercentage').innerText = `${extraPct.toFixed(1)}%`;
+            document.getElementById('auditMissingPercentage').innerText = `${missingPct.toFixed(1)}%`;
+            
+
+            
+            // Items with their Locations Table
+            const locationTable = document.getElementById('locationDetailsTable');
+            const productEntries = Object.entries(data.productReport || {})
+                .sort((a, b) => b[1].locations.length - a[1].locations.length); // Sort by number of locations
+            
+            // حفظ البيانات في متغير عام
+            window.productLocationsData = {};
+            
+            locationTable.innerHTML = productEntries.map(([productId, prod]) => {
+                // احفظ البيانات في الكائن العام
+                window.productLocationsData[productId] = {
+                    name: prod.name,
+                    locations: prod.locations
+                };
+                
+                return `
                 <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-4 py-3 font-bold text-slate-800">${name}</td>
-                    <td class="px-4 py-3 text-center font-medium text-slate-600">${loc.totalItems}</td>
-                    <td class="px-4 py-3 text-center font-bold text-green-600">${loc.matched}</td>
-                    <td class="px-4 py-3 text-center font-bold text-orange-600">${loc.extra}</td>
-                    <td class="px-4 py-3 text-center font-bold text-red-600">${loc.missing}</td>
+                    <td class="px-4 py-3 font-bold text-slate-800">${prod.name}</td>
+                    <td class="px-4 py-3 text-center font-mono text-slate-600">${productId}</td>
                     <td class="px-4 py-3 text-center">
-                        <span class="px-3 py-1 text-xs font-medium rounded-full ${
-                            loc.mostCommonStatus && loc.mostCommonStatus.toLowerCase().includes('مطابق') ? 'bg-green-100 text-green-700' :
-                            loc.mostCommonStatus && loc.mostCommonStatus.toLowerCase().includes('match') ? 'bg-green-100 text-green-700' :
-                            loc.mostCommonStatus && (loc.mostCommonStatus.toLowerCase().includes('extra') || loc.mostCommonStatus.toLowerCase().includes('زيادة')) ? 'bg-orange-100 text-orange-700' :
-                            loc.mostCommonStatus && (loc.mostCommonStatus.toLowerCase().includes('miss') || loc.mostCommonStatus.toLowerCase().includes('ناقص')) ? 'bg-red-100 text-red-700' :
-                            'bg-slate-100 text-slate-600'
-                        }">
-                            ${loc.mostCommonStatus || 'N/A'}
+                        <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
+                            ${prod.locations.length}
                         </span>
                     </td>
-                    <td class="px-4 py-3 text-right">
-                        <div class="flex items-center justify-end">
-                            <span class="font-bold mr-2 ${loc.accuracy > 90 ? 'text-green-600' : loc.accuracy > 80 ? 'text-blue-600' : 'text-orange-600'}">
-                                ${loc.accuracy.toFixed(1)}%
-                            </span>
-                            <div class="w-20 bg-slate-100 h-2 rounded-full">
-                                <div class="h-2 rounded-full ${loc.accuracy > 90 ? 'bg-green-500' : loc.accuracy > 80 ? 'bg-blue-500' : 'bg-orange-500'}" 
-                                     style="width: ${loc.accuracy}%"></div>
-                            </div>
-                        </div>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="showLocationsModal('${productId}')" 
+                                class="px-3 py-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                            View
+                        </button>
                     </td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
 
             // Status Distribution Chart
             const distCtx = document.getElementById('statusDistChart').getContext('2d');
@@ -183,43 +177,11 @@
                 problematicDiv.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No recurring stability issues detected.</p>';
             }
 
-            // Staff Performance Table
-            const staffTbody = document.getElementById('staffTable');
-            staffTbody.innerHTML = Object.entries(data.staffReport)
-                .sort((a, b) => b[1].total - a[1].total) // Sort by most active
-                .filter(([name]) => name !== 'System') // Optional: focus on real workers
-                .map(([name, s]) => `
-                    <tr class="hover:bg-slate-50 transition-colors">
-                        <td class="px-6 py-4 font-bold text-slate-800">${name}</td>
-                        <td class="px-6 py-4 text-center font-medium">${s.total}</td>
-                        <td class="px-6 py-4 text-center text-green-600 font-bold">${s.match}</td>
-                        <td class="px-6 py-4 text-center text-red-600 font-bold">${s.missing}</td>
-                        <td class="px-6 py-4">
-                            <div class="flex items-center">
-                                <span class="font-bold mr-2 ${s.accuracy > 95 ? 'text-green-600' : s.accuracy > 85 ? 'text-blue-600' : 'text-orange-600'}">
-                                    ${s.accuracy.toFixed(1)}%
-                                </span>
-                                <div class="flex-1 bg-slate-100 h-1.5 rounded-full min-w-[60px]">
-                                    <div class="h-1.5 rounded-full ${s.accuracy > 95 ? 'bg-green-500' : s.accuracy > 85 ? 'bg-blue-500' : 'bg-orange-500'}" style="width: ${s.accuracy}%"></div>
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                `).join('');
+            // Staff Performance Table - حفظ البيانات الكاملة للتصفية
+            window.staffFullData = data.staffReport;
+            window.discrepanciesFullData = data.discrepanciesArr;
             
-            // Re-add System if needed at the bottom
-            const sys = data.staffReport['System'];
-            if (sys) {
-                staffTbody.innerHTML += `
-                    <tr class="bg-slate-50 opacity-75">
-                        <td class="px-6 py-4 italic text-slate-500">System / Unassigned</td>
-                        <td class="px-6 py-4 text-center font-medium">${sys.total}</td>
-                        <td class="px-6 py-4 text-center text-green-600 font-bold">${sys.match}</td>
-                        <td class="px-6 py-4 text-center text-red-600 font-bold">${sys.missing}</td>
-                        <td class="px-6 py-4 text-slate-400">N/A</td>
-                    </tr>
-                `;
-            }
+            renderStaffTable(data.staffReport);
 
             // Render Discrepancy Table Initial
             renderDiscrepancyTable(data.discrepanciesArr);
@@ -228,12 +190,34 @@
         function setupAuditFilters() {
             const searchInput = document.getElementById('auditSearchInput');
             const statusFilter = document.getElementById('auditStatusFilter');
+            const dateFromInput = document.getElementById('auditDateFrom');
+            const dateToInput = document.getElementById('auditDateTo');
+            const dateClearBtn = document.getElementById('auditDateClear');
 
             if (searchInput.dataset.initialized) return;
+
+            const parseInputDate = (value, endOfDay) => {
+                if (!value) return null;
+                const parts = value.split('-').map(Number);
+                if (parts.length !== 3) return null;
+                const [year, month, day] = parts;
+                return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+            };
+
+            const parseMMDDYYYY = (dateStr) => {
+                if (!dateStr || dateStr === 'N/A') return null;
+                const parts = dateStr.split('/').map(Number);
+                if (parts.length !== 3) return null;
+                const [month, day, year] = parts;
+                return new Date(year, month - 1, day, 12, 0, 0);
+            };
 
             const triggerFilter = () => {
                 const searchTerm = searchInput.value.toLowerCase();
                 const statusVal = statusFilter.value;
+                const hasDateFilter = Boolean(dateFromInput?.value || dateToInput?.value);
+                const startDate = parseInputDate(dateFromInput?.value, false) || new Date(1900, 0, 1, 0, 0, 0);
+                const endDate = parseInputDate(dateToInput?.value, true) || new Date(2099, 11, 31, 23, 59, 59);
 
                 const filtered = auditDiscrepancies.filter(d => {
                     const matchesSearch = 
@@ -248,7 +232,10 @@
                         (statusVal === 'extra' && d.diff > 0) || 
                         (statusVal === 'missing' && d.diff < 0);
 
-                    return matchesSearch && matchesStatus;
+                    const recordDate = parseMMDDYYYY(d.dateNow);
+                    const matchesDate = !hasDateFilter || (recordDate && recordDate >= startDate && recordDate <= endDate);
+
+                    return matchesSearch && matchesStatus && matchesDate;
                 });
 
                 renderDiscrepancyTable(filtered);
@@ -256,6 +243,14 @@
 
             searchInput.addEventListener('input', triggerFilter);
             statusFilter.addEventListener('change', triggerFilter);
+            dateFromInput?.addEventListener('change', triggerFilter);
+            dateToInput?.addEventListener('change', triggerFilter);
+            dateClearBtn?.addEventListener('click', () => {
+                if (dateFromInput) dateFromInput.value = '';
+                if (dateToInput) dateToInput.value = '';
+                triggerFilter();
+            });
+
             searchInput.dataset.initialized = 'true';
         }
 
@@ -266,7 +261,7 @@
             countDisplay.innerText = `Showing ${discrepancies.length} rows`;
 
             if (!discrepancies || discrepancies.length === 0) {
-                discTbody.innerHTML = `<tr><td colspan="21" class="px-6 py-10 text-center text-slate-400">No discrepancies match your filters</td></tr>`;
+                discTbody.innerHTML = `<tr><td colspan="18" class="px-6 py-10 text-center text-slate-400">No discrepancies match your filters</td></tr>`;
                 return;
             }
 
@@ -276,7 +271,6 @@
                     <td class="px-3 py-3 font-mono text-slate-400">${d.barcode}</td>
                     <td class="px-3 py-3 font-mono text-slate-400">${d.productId}</td>
                     <td class="px-3 py-3 font-bold text-slate-800">${d.product}</td>
-                    <td class="px-3 py-3 text-slate-500">${d.lotSerial}</td>
                     <td class="px-3 py-3 text-slate-500">${d.productionDate}</td>
                     <td class="px-3 py-3 text-right text-slate-500">${d.expirationDate}</td>
                     <td class="px-3 py-3 text-right text-slate-500">${d.firstQty}</td>
@@ -285,13 +279,11 @@
                     <td class="px-3 py-3 text-right text-slate-600">${d.firstVar}</td>
                     <td class="px-3 py-3 text-right text-slate-600">${d.finalVar}</td>
                     <td class="px-3 py-3"><span class="text-[10px] px-2 py-1 bg-slate-50 border rounded-md text-slate-600">${d.locationStatus}</span></td>
-                    <td class="px-3 py-3"><span class="text-[10px] px-2 py-1 bg-slate-50 border rounded-md text-slate-600">${d.lotStatus}</span></td>
                     <td class="px-3 py-3 whitespace-normal min-w-[120px]">
                         <span class="px-2 py-0.5 rounded text-[10px] font-bold ${d.diff > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}">
                             ${d.productStatus || (d.diff > 0 ? 'Extra' : 'Missing')}
                         </span>
                     </td>
-                    <td class="px-3 py-3 text-slate-500">${d.createdBy}</td>
                     <td class="px-3 py-3 font-medium text-slate-800">${d.staffName}</td>
                     <td class="px-3 py-3 text-center text-slate-400">${d.employeeAccuracy}</td>
                     <td class="px-3 py-3 text-slate-400 text-[10px]">${d.live}</td>
@@ -482,9 +474,52 @@
                 modal.classList.add('hidden');
             }, 200);
         }
+        
+        function showLocationsModal(productId) {
+            const productData = window.productLocationsData[productId];
+            
+            if (!productData) {
+                console.error('Product data not found:', productId);
+                return;
+            }
+            
+            document.getElementById('locModalTitle').innerText = `Locations for: ${productData.name}`;
+            const locationsListBody = document.getElementById('locationsListBody');
+            
+            locationsListBody.innerHTML = productData.locations.map(loc => `
+                <div class="p-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-slate-100 transition-colors">
+                    <p class="font-semibold text-slate-800">${loc}</p>
+                </div>
+            `).join('');
+
+            // Show Modal
+            const modal = document.getElementById('locationsModal');
+            modal.classList.remove('hidden');
+            // Trigger reflow
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            modal.querySelector('div').classList.remove('scale-95');
+            modal.querySelector('div').classList.add('scale-100');
+        }
+
+        function closeLocationsModal() {
+            const modal = document.getElementById('locationsModal');
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.remove('scale-100');
+            modal.querySelector('div').classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+        
         // Close on backdrop click
         document.getElementById('historyModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('historyModal')) closeHistory();
+        });
+
+        document.getElementById('locationsModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('locationsModal')) closeLocationsModal();
         });
 
         // Initial Load
@@ -493,3 +528,249 @@
             if (currentTab === 'inventory') fetchData();
             else fetchSmartAnalysis();
         }, 60000); // Refresh every minute
+
+        // تهيئة مستمعي الفلتر
+        function setupDateFilterListeners() {
+            const dateFromInput = document.getElementById('staffDateFrom');
+            const dateToInput = document.getElementById('staffDateTo');
+            
+            if (dateFromInput && dateToInput) {
+                dateFromInput.addEventListener('change', filterStaffByDate);
+                dateToInput.addEventListener('change', filterStaffByDate);
+                console.log('Date filter listeners attached');
+            }
+        }
+        
+        // الاتصال بالدالة بعد التحميل
+        setTimeout(setupDateFilterListeners, 500);
+
+        // دوال الفلتر للـ Staff Table
+        function renderStaffTable(staffData) {
+            const staffTbody = document.getElementById('staffTable');
+            staffTbody.innerHTML = Object.entries(staffData)
+                .sort((a, b) => b[1].total - a[1].total)
+                .filter(([name]) => name !== 'System')
+                .map(([name, s]) => `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-6 py-4 font-bold text-slate-800">${name}</td>
+                        <td class="px-6 py-4 text-center font-medium">${s.total}</td>
+                        <td class="px-6 py-4 text-center text-green-600 font-bold">${s.match}</td>
+                        <td class="px-6 py-4 text-center text-red-600 font-bold">${s.missing}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                <span class="font-bold mr-2 ${s.accuracy > 95 ? 'text-green-600' : s.accuracy > 85 ? 'text-blue-600' : 'text-orange-600'}">
+                                    ${s.accuracy.toFixed(1)}%
+                                </span>
+                                <div class="flex-1 bg-slate-100 h-1.5 rounded-full min-w-[60px]">
+                                    <div class="h-1.5 rounded-full ${s.accuracy > 95 ? 'bg-green-500' : s.accuracy > 85 ? 'bg-blue-500' : 'bg-orange-500'}" style="width: ${s.accuracy}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            
+            const sys = staffData['System'];
+            if (sys) {
+                staffTbody.innerHTML += `
+                    <tr class="bg-slate-50 opacity-75">
+                        <td class="px-6 py-4 italic text-slate-500">System / Unassigned</td>
+                        <td class="px-6 py-4 text-center font-medium">${sys.total}</td>
+                        <td class="px-6 py-4 text-center text-green-600 font-bold">${sys.match}</td>
+                        <td class="px-6 py-4 text-center text-red-600 font-bold">${sys.missing}</td>
+                        <td class="px-6 py-4 text-slate-400">N/A</td>
+                    </tr>
+                `;
+            }
+            
+            // رسم الـ Chart
+            renderStaffChart(staffData);
+        }
+        
+        function renderStaffChart(staffData) {
+            const canvas = document.getElementById('staffProductivityChart');
+            if (!canvas) {
+                console.error('Staff chart canvas not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            
+            // تدمير الـ chart القديم
+            if (staffProductivityChart) {
+                staffProductivityChart.destroy();
+            }
+            
+            // ترتيب البيانات بنفس ترتيب الجدول (بدون System)
+            const sortedData = Object.entries(staffData)
+                .filter(([name]) => name !== 'System')
+                .sort((a, b) => b[1].total - a[1].total);
+            
+            const labels = sortedData.map(([name]) => name);
+            const totalItems = sortedData.map(([_, s]) => s.total);
+            const matchedItems = sortedData.map(([_, s]) => s.match);
+            const missingItems = sortedData.map(([_, s]) => s.missing);
+            const accuracyData = sortedData.map(([_, s]) => s.accuracy);
+            
+            staffProductivityChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Total Items',
+                            data: totalItems,
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Matched',
+                            data: matchedItems,
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Missing',
+                            data: missingItems,
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { size: 12, weight: 'bold' },
+                                padding: 15
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Items Audited per Staff Member',
+                            font: { size: 14, weight: 'bold' },
+                            padding: { bottom: 20 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const dataIndex = context.dataIndex;
+                                    const accuracy = accuracyData[dataIndex];
+                                    return `Accuracy: ${accuracy.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Items',
+                                font: { size: 12, weight: 'bold' }
+                            },
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Staff Members',
+                                font: { size: 12, weight: 'bold' }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function filterStaffByDate() {
+            const dateFrom = document.getElementById('staffDateFrom').value;
+            const dateTo = document.getElementById('staffDateTo').value;
+
+            if (!window.discrepanciesFullData || window.discrepanciesFullData.length === 0) {
+                alert('No data available for filtering. Please refresh the page.');
+                return;
+            }
+
+            // إذا لم يتم اختيار أي تاريخ
+            if (!dateFrom && !dateTo) {
+                renderStaffTable(window.staffFullData);
+                return;
+            }
+
+            const parseInputDate = (value, endOfDay) => {
+                if (!value) return null;
+                // input type="date" returns YYYY-MM-DD
+                const parts = value.split('-').map(Number);
+                if (parts.length !== 3) return null;
+                const [year, month, day] = parts;
+                return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+            };
+
+            const parseMMDDYYYY = (dateStr) => {
+                if (!dateStr || dateStr === 'N/A') return null;
+                const parts = dateStr.split('/').map(Number);
+                if (parts.length !== 3) return null;
+                const [month, day, year] = parts;
+                return new Date(year, month - 1, day, 12, 0, 0);
+            };
+
+            const startDate = parseInputDate(dateFrom, false) || new Date(1900, 0, 1, 0, 0, 0);
+            const endDate = parseInputDate(dateTo, true) || new Date(2099, 11, 31, 23, 59, 59);
+
+            // فلتر الـ discrepancies حسب التاريخ (MM/DD/YYYY)
+            const filteredDiscrepancies = window.discrepanciesFullData.filter(d => {
+                const dateStr = d.dateNow || d.date || d.inventoryDate || '';
+                const recordDate = parseMMDDYYYY(dateStr);
+                if (!recordDate || isNaN(recordDate.getTime())) return false;
+                return recordDate >= startDate && recordDate <= endDate;
+            });
+
+            if (filteredDiscrepancies.length === 0) {
+                alert('No records found for selected date range');
+                return;
+            }
+
+            // أعد حساب الـ staffData من البيانات المفلترة
+            const filteredStaffData = {};
+            filteredDiscrepancies.forEach(d => {
+                const staffName = d.staffName || 'System';
+                if (!filteredStaffData[staffName]) {
+                    filteredStaffData[staffName] = { total: 0, match: 0, extra: 0, missing: 0, accuracy: 0 };
+                }
+                filteredStaffData[staffName].total++;
+                
+                if (d.diff === 0) {
+                    filteredStaffData[staffName].match++;
+                } else if (d.diff > 0) {
+                    filteredStaffData[staffName].extra++;
+                } else if (d.diff < 0) {
+                    filteredStaffData[staffName].missing++;
+                }
+            });
+
+            // احسب accuracy
+            Object.keys(filteredStaffData).forEach(name => {
+                const s = filteredStaffData[name];
+                s.accuracy = s.total > 0 ? (s.match / s.total) * 100 : 0;
+            });
+
+            console.log('Filtered staff:', Object.keys(filteredStaffData));
+            renderStaffTable(filteredStaffData);
+        }
+
+        function clearStaffDateFilter() {
+            document.getElementById('staffDateFrom').value = '';
+            document.getElementById('staffDateTo').value = '';
+            renderStaffTable(window.staffFullData);
+        }
+        
+        // إتاحة الدالة للاستخدام من HTML
+        window.clearStaffDateFilter = clearStaffDateFilter;

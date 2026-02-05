@@ -17,6 +17,17 @@ export function analyzeInventory(data) {
             totalExtra: 0,
             totalMissing: 0,
             totalRows: 0,
+            // مجموع القطع من physicalQty
+            physicalQtyMatched: 0,
+            physicalQtyExtra: 0,
+            physicalQtyMissing: 0,
+            physicalQtyTotal: 0,
+            // مجموع System Qty
+            systemQtyTotal: 0,
+            // النسب المئوية
+            matchedPercentage: 0,
+            extraPercentage: 0,
+            missingPercentage: 0,
             trends: {
                 daily: {},
                 weekly: {}
@@ -73,7 +84,7 @@ export function analyzeInventory(data) {
 
         
         const systemQty = parseFloat(findVal(['sysqty', 'systemqty', 'stockqty', 'logicalqty', 'bookqty', 'logicqty', 'expected', 'expectedqty', 'system'])) || 0;
-        const physicalQty = parseFloat(findVal(['finalqty', 'physicalqty', 'physqty', 'countqty', 'actualqty', 'quantity', 'qty', 'count', 'num', 'actual', 'physical', 'counted', 'firstqty'])) || 0;
+        const physicalQty = parseFloat(findVal(['finalqty', 'physicalqty', 'physqty', 'countqty', 'actualqty', 'quantity', 'qty', 'count', 'num', 'actual', 'physical', 'counted'])) || 0;
         const status = (findVal(['productstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus']) || '').toLowerCase();
         const expiryDateStr = findVal(['expirationdate', 'expirydate', 'expiry', 'exp', 'expiration', 'expirydate/time']);
         const inventoryDateStr = findVal(['datenow', 'inventorydate', 'date', 'invdate', 'countdate', 'datecounted', 'timestamp', 'productiondate']);
@@ -136,11 +147,12 @@ export function analyzeInventory(data) {
         else if (normalizedStatus === 'extra') loc.extra++;
         else if (normalizedStatus === 'missing') loc.missing++;
 
-        // 3. Product Analysis
+        // 3. Product Analysis - تتبع كل item وفي اي لوكيشنز موجود
         if (!analysis.productReport[productId]) {
             analysis.productReport[productId] = {
                 name: productName || productId,
                 totalAudits: 0,
+                locations: [], // قائمة اللوكيشنز اللي موجود فيها
                 issues: { match: 0, extra: 0, missing: 0 },
                 issueFrequency: 0
             };
@@ -149,6 +161,11 @@ export function analyzeInventory(data) {
         prod.totalAudits++;
         prod.issues[normalizedStatus]++;
         prod.issueFrequency = ((prod.issues.extra + prod.issues.missing) / prod.totalAudits) * 100;
+        
+        // أضف اللوكيشن للقائمة إذا لم يكن موجود
+        if (!prod.locations.includes(location)) {
+            prod.locations.push(location);
+        }
 
         // 4. Expiry Analysis
         if (expiryDateStr) {
@@ -184,9 +201,19 @@ export function analyzeInventory(data) {
 
         // Global Totals
         analysis.kpis.totalRows++;
-        if (normalizedStatus === 'match') analysis.kpis.totalMatched++;
-        else if (normalizedStatus === 'extra') analysis.kpis.totalExtra++;
-        else if (normalizedStatus === 'missing') analysis.kpis.totalMissing++;
+        analysis.kpis.physicalQtyTotal += physicalQty;
+        analysis.kpis.systemQtyTotal += systemQty;
+        
+        if (normalizedStatus === 'match') {
+            analysis.kpis.totalMatched++;
+            analysis.kpis.physicalQtyMatched += physicalQty;
+        } else if (normalizedStatus === 'extra') {
+            analysis.kpis.totalExtra++;
+            analysis.kpis.physicalQtyExtra += physicalQty;
+        } else if (normalizedStatus === 'missing') {
+            analysis.kpis.totalMissing++;
+            analysis.kpis.physicalQtyMissing += physicalQty;
+        }
 
         // 6. Staff Performance Tracking
         if (!analysis.staffReport[staffName]) {
@@ -257,6 +284,13 @@ export function analyzeInventory(data) {
     });
 
 
+    // حساب النسب المئوية لكل حالة مقارنة مع System Qty الكلي
+    if (analysis.kpis.systemQtyTotal > 0) {
+        analysis.kpis.matchedPercentage = (analysis.kpis.physicalQtyMatched * 100) / analysis.kpis.systemQtyTotal;
+        analysis.kpis.extraPercentage = (analysis.kpis.physicalQtyExtra * 100) / analysis.kpis.systemQtyTotal;
+        analysis.kpis.missingPercentage = (analysis.kpis.physicalQtyMissing * 100) / analysis.kpis.systemQtyTotal;
+    }
+
     // Finalize Location Metrics
     Object.keys(analysis.locationReport).forEach(name => {
         const loc = analysis.locationReport[name];
@@ -309,13 +343,14 @@ export function analyzeInventory(data) {
             action: 'Urgent Audit & Removal'
         });
     }
-    if (analysis.kpis.overallAccuracy < 90) {
-        analysis.alerts.push({
-            type: 'warning',
-            message: `Global accuracy is below target (${analysis.kpis.overallAccuracy.toFixed(1)}%).`,
-            action: 'Blind Recount Implementation'
-        });
-    }
+    // Accuracy alert disabled
+    // if (analysis.kpis.overallAccuracy < 90) {
+    //     analysis.alerts.push({
+    //         type: 'warning',
+    //         message: `Global accuracy is below target (${analysis.kpis.overallAccuracy.toFixed(1)}%).`,
+    //         action: 'Blind Recount Implementation'
+    //     });
+    // }
 
     // Chart Data Status Distribution
     analysis.chartData.statusDistribution.datasets = [
