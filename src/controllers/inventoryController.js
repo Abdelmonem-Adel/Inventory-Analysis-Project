@@ -1,5 +1,5 @@
 import { readSheet, listSheetTitles } from "../../services/sheet.service.js";
-import { processInventoryData } from "../Util/analytics.js";
+import { processInventoryData, calculateKPIs } from "../Util/analytics.js";
 import { applyFilters } from "../Util/filters.js";
 import { analyzeInventory } from "../Util/smartAnalysis.js";
 
@@ -7,9 +7,21 @@ import { analyzeInventory } from "../Util/smartAnalysis.js";
 export const getInventoryDashboard = async (req, res, next) => {
     try {
         // 1. Fetch data from Google Sheets
-        const rawData = await readSheet();
+        // 1. Identify Target Sheet (Sheet1)
+        console.log("[Inventory] identifying data sheet...");
+        const titles = await listSheetTitles();
+        const targetPattern = /sheet\s*1/i;
+        const sheetTitle = titles.find(t => targetPattern.test(t));
 
-        // 2. Check for Empty Data
+        if (!sheetTitle) {
+            console.warn("[Inventory] 'Sheet1' not found. Falling back to reading ALL sheets.");
+        }
+
+        // 2. Fetch Data
+        const rawData = await readSheet(process.env.SPREADSHEET_ID, sheetTitle || null);
+        console.log(`[Inventory] Loaded ${rawData ? rawData.length : 0} rows from ${sheetTitle || 'ALL SHEETS'}`);
+
+        // 3. Check for Empty Data
         if (!rawData || rawData.length === 0) {
             console.log('--- Sheets returned empty. ---');
             return res.json({ products: [], kpis: { totalProducts: 0, totalCurrentQuantity: 0 } });
@@ -27,10 +39,13 @@ export const getInventoryDashboard = async (req, res, next) => {
         // 4. Apply Filters
         const filteredProducts = applyFilters(processed.products, req.query);
 
-        // 5. Return Response
+        // 5. Recalculate KPIs based on Filtered Data
+        const dynamicKPIs = calculateKPIs(filteredProducts);
+
+        // 6. Return Response
         res.json({
             products: filteredProducts,
-            kpis: processed.kpis,
+            kpis: dynamicKPIs,
             meta: {
                 timestamp: new Date().toISOString()
             }

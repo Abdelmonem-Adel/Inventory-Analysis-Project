@@ -8,6 +8,8 @@ export function processInventoryData(data, startDate = null, endDate = null) {
 
     // Group by ProductCode
     const products = {};
+    let skippedNoCode = 0;
+    let skippedDate = 0;
 
     data.forEach(row => {
         // Normalize keys and find matching properties
@@ -17,16 +19,27 @@ export function processInventoryData(data, startDate = null, endDate = null) {
         };
 
         let ProductCode = findVal(['sku', 'productcode', 'code', 'id', 'breadfastid']);
-        const BreadfastID = findVal(['breadfastid', 'bfid', 'itemid']);
-        const ProductName = findVal(['productname', 'name', 'item']);
+        let BreadfastID = findVal(['breadfastid', 'bfid', 'itemid']);
+        let ProductName = findVal(['productname', 'name', 'item']);
         const CountDate = findVal(['date', 'countdate']);
         const Quantity = findVal(['physicalqty', 'num', 'quantity', 'qty', 'count', 'stockqty']);
-        const Category = findVal(['product/productcategory', 'category', 'type', 'cat']) || 'Other';
+        const ProductStatus = findVal(['productstatus', 'proudactstatus', 'status', 'loc.status']);
+        const rawCat = findVal(['product/productcategory', 'category', 'type', 'cat']);
+        const Category = (rawCat ? String(rawCat) : 'Other').trim();
         const Warehouse = findVal(['warehouse', 'location', 'store']) || 'Main';
+
+        // Ensure String Types for IDs/Names to prevent .toLowerCase() crashes
+        if (ProductCode) ProductCode = String(ProductCode).trim();
+        if (BreadfastID) BreadfastID = String(BreadfastID).trim();
+        if (ProductName) ProductName = String(ProductName).trim();
+
 
         if (!ProductCode) ProductCode = BreadfastID;
 
-        if (!ProductCode || !CountDate) return;
+        if (!ProductCode || !CountDate) {
+            skippedNoCode++;
+            return;
+        }
 
         if (!products[ProductCode]) {
             products[ProductCode] = {
@@ -35,6 +48,7 @@ export function processInventoryData(data, startDate = null, endDate = null) {
                 ProductName: ProductName || ProductCode,
                 Category,
                 Warehouse,
+                ProductStatus: ProductStatus || 'Matched',
                 history: []
             };
         }
@@ -65,7 +79,8 @@ export function processInventoryData(data, startDate = null, endDate = null) {
         }
 
         if (isNaN(parsedDate.getTime())) {
-            
+            console.warn(`[Analytics] Skipped row due to invalid date: ${CountDate} (Code: ${ProductCode})`);
+            skippedDate++;
             return;
         }
 
@@ -74,6 +89,12 @@ export function processInventoryData(data, startDate = null, endDate = null) {
             quantity: parseInt(Quantity) || 0
         });
     });
+
+    console.log(`[Analytics] Data Import Summary:`);
+    console.log(`   - Total Rows Input: ${data.length}`);
+    console.log(`   - Skipped (No Code): ${skippedNoCode}`);
+    console.log(`   - Skipped (No Date): ${skippedDate}`);
+    console.log(`   - Unique Products: ${Object.keys(products).length}`);
 
     const processedProducts = Object.values(products).map(product => {
         // Sort history by date ASC
@@ -149,17 +170,34 @@ export function processInventoryData(data, startDate = null, endDate = null) {
     };
 }
 
-function calculateKPIs(products) {
+export function calculateKPIs(products) {
     let totalQuantity = 0;
     let increasedCount = 0;
     let decreasedCount = 0;
+    let stableCount = 0; // Matched
+
+    let sumIncreased = 0;
+    let sumDecreased = 0;
+    let sumStable = 0;
+
     let biggestIncrease = { val: 0, product: '' };
     let biggestDecrease = { val: 0, product: '' };
 
     products.forEach(p => {
         totalQuantity += p.currentQuantity;
-        if (p.lastDiff > 0) increasedCount++;
-        if (p.lastDiff < 0) decreasedCount++;
+
+        const status = (p.ProductStatus || '').toLowerCase();
+
+        if (status.includes('extra') || status.includes('increased')) {
+            increasedCount++;
+            sumIncreased += p.currentQuantity;
+        } else if (status.includes('missing') || status.includes('decreased')) {
+            decreasedCount++;
+            sumDecreased += p.currentQuantity;
+        } else {
+            stableCount++; // Matched/Stable
+            sumStable += p.currentQuantity;
+        }
 
         if (p.lastDiff > biggestIncrease.val) {
             biggestIncrease = { val: p.lastDiff, product: p.ProductName };
@@ -169,11 +207,26 @@ function calculateKPIs(products) {
         }
     });
 
+    const total = products.length;
+    const accuracy = total > 0 ? ((stableCount / total) * 100).toFixed(1) : 0;
+
+    const percentStable = total > 0 ? ((stableCount / total) * 100).toFixed(1) : 0;
+    const percentIncreased = total > 0 ? ((increasedCount / total) * 100).toFixed(1) : 0;
+    const percentDecreased = total > 0 ? ((decreasedCount / total) * 100).toFixed(1) : 0;
+
     return {
-        totalProducts: products.length,
+        totalProducts: total,
         totalCurrentQuantity: totalQuantity,
-        productsIncreased: increasedCount,
-        productsDecreased: decreasedCount,
+        productsIncreased: increasedCount, // Extra
+        productsDecreased: decreasedCount, // Missing
+        productsStable: stableCount,       // Matched
+        sumIncreased,
+        sumDecreased,
+        sumStable,
+        percentIncreased,
+        percentDecreased,
+        percentStable,
+        accuracy: accuracy,
         biggestDailyIncrease: biggestIncrease,
         biggestDailyDecrease: biggestDecrease
     };

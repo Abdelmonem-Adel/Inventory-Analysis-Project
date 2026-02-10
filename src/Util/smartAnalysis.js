@@ -17,14 +17,14 @@ export function analyzeInventory(data) {
             totalExtra: 0,
             totalMissing: 0,
             totalRows: 0,
-            // مجموع القطع من physicalQty
+            // Total pieces from physicalQty
             physicalQtyMatched: 0,
             physicalQtyExtra: 0,
             physicalQtyMissing: 0,
             physicalQtyTotal: 0,
-            // مجموع System Qty
+            // Total System Qty
             systemQtyTotal: 0,
-            // النسب المئوية
+            // Percentages
             matchedPercentage: 0,
             extraPercentage: 0,
             missingPercentage: 0,
@@ -82,19 +82,19 @@ export function analyzeInventory(data) {
             staffName = 'System';
         }
 
-        
+
         const systemQty = parseFloat(findVal(['sysqty', 'systemqty', 'stockqty', 'logicalqty', 'bookqty', 'logicqty', 'expected', 'expectedqty', 'system'])) || 0;
         const physicalQty = parseFloat(findVal(['finalqty', 'physicalqty', 'physqty', 'countqty', 'actualqty', 'quantity', 'qty', 'count', 'num', 'actual', 'physical', 'counted'])) || 0;
-        const status = (findVal(['productstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus']) || '').toLowerCase();
+        const status = String(findVal(['productstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus']) || '').toLowerCase();
         const expiryDateStr = findVal(['expirationdate', 'expirydate', 'expiry', 'exp', 'expiration', 'expirydate/time']);
-        const inventoryDateStr = findVal(['datenow', 'inventorydate', 'date', 'invdate', 'countdate', 'datecounted', 'timestamp', 'productiondate']);
+        const inventoryDateStr = findVal(['inventorydate', 'datenow', 'date', 'invdate', 'countdate', 'datecounted', 'timestamp', 'productiondate']);
 
         // Skip rows that don't look like audit records
         if (!productId || (!status && isNaN(systemQty) && isNaN(physicalQty))) return;
 
         // 1. Normalize Status for KPIs
-        const productStatusRaw = (findVal(['productstatus', 'status', 'matchstatus', 'discrepancy']) || '').toLowerCase();
-        const empAccuracyRaw = (findVal(['employeeaccuracy', 'staffaccuracy', 'workeraccuracy']) || '').toLowerCase();
+        const productStatusRaw = String(findVal(['productstatus', 'status', 'matchstatus', 'discrepancy']) || '').toLowerCase();
+        const empAccuracyRaw = String(findVal(['employeeaccuracy', 'staffaccuracy', 'workeraccuracy']) || '').toLowerCase();
 
         let normalizedStatus = 'unknown';
 
@@ -107,7 +107,7 @@ export function analyzeInventory(data) {
             normalizedStatus = 'missing';
         } else {
             // Fallback to quantity comparison if Product Status is empty
-            if (systemQty === physicalQty && systemQty > 0) normalizedStatus = 'match';
+            if (systemQty === physicalQty) normalizedStatus = 'match';
             else if (physicalQty > systemQty) normalizedStatus = 'extra';
             else if (physicalQty < systemQty) normalizedStatus = 'missing';
         }
@@ -135,24 +135,24 @@ export function analyzeInventory(data) {
             };
         }
         const loc = analysis.locationReport[location];
-        
+
         // Capture location status from the row
         const locationStatus = findVal(['locatonstatus', 'locationstatus', 'locstatus']);
         if (locationStatus) {
             loc.locationStatuses.push(locationStatus);
         }
-        
+
         loc.totalItems++;
         if (normalizedStatus === 'match') loc.matched++;
         else if (normalizedStatus === 'extra') loc.extra++;
         else if (normalizedStatus === 'missing') loc.missing++;
 
-        // 3. Product Analysis - تتبع كل item وفي اي لوكيشنز موجود
+        // 3. Product Analysis
         if (!analysis.productReport[productId]) {
             analysis.productReport[productId] = {
                 name: productName || productId,
                 totalAudits: 0,
-                locations: [], // قائمة اللوكيشنز اللي موجود فيها
+                locations: [],
                 issues: { match: 0, extra: 0, missing: 0 },
                 issueFrequency: 0
             };
@@ -161,8 +161,8 @@ export function analyzeInventory(data) {
         prod.totalAudits++;
         prod.issues[normalizedStatus]++;
         prod.issueFrequency = ((prod.issues.extra + prod.issues.missing) / prod.totalAudits) * 100;
-        
-        // أضف اللوكيشن للقائمة إذا لم يكن موجود
+
+        // Track locations for each product
         if (!prod.locations.includes(location)) {
             prod.locations.push(location);
         }
@@ -203,7 +203,7 @@ export function analyzeInventory(data) {
         analysis.kpis.totalRows++;
         analysis.kpis.physicalQtyTotal += physicalQty;
         analysis.kpis.systemQtyTotal += systemQty;
-        
+
         if (normalizedStatus === 'match') {
             analysis.kpis.totalMatched++;
             analysis.kpis.physicalQtyMatched += physicalQty;
@@ -226,7 +226,7 @@ export function analyzeInventory(data) {
 
         // 7. Discrepancy Drill-down
         if (normalizedStatus !== 'match') {
-            
+
             const barcode = findVal(['barcode', 'ean', 'upc']);
             const itemId = findVal(['itemid', 'productid', 'sku', 'id']);
             const lotSerial = findVal(['lotserialnumber', 'lotserial', 'lot', 'serial', 'batch']);
@@ -248,7 +248,7 @@ export function analyzeInventory(data) {
                 location,
                 category,
                 product: productName || itemId || 'Unknown Product',
-                productId : itemId || productId || 'N/A',
+                productId: itemId || productId || 'N/A',
                 barcode: barcode || 'N/A',
 
                 // Lot & Dates
@@ -284,11 +284,11 @@ export function analyzeInventory(data) {
     });
 
 
-    // حساب النسب المئوية لكل حالة مقارنة مع System Qty الكلي
-    if (analysis.kpis.systemQtyTotal > 0) {
-        analysis.kpis.matchedPercentage = (analysis.kpis.physicalQtyMatched * 100) / analysis.kpis.systemQtyTotal;
-        analysis.kpis.extraPercentage = (analysis.kpis.physicalQtyExtra * 100) / analysis.kpis.systemQtyTotal;
-        analysis.kpis.missingPercentage = (analysis.kpis.physicalQtyMissing * 100) / analysis.kpis.systemQtyTotal;
+    // Calculate KPI Percentages (Based on record counts/rows for consistency)
+    if (analysis.kpis.totalRows > 0) {
+        analysis.kpis.matchedPercentage = (analysis.kpis.totalMatched * 100) / analysis.kpis.totalRows;
+        analysis.kpis.extraPercentage = (analysis.kpis.totalExtra * 100) / analysis.kpis.totalRows;
+        analysis.kpis.missingPercentage = (analysis.kpis.totalMissing * 100) / analysis.kpis.totalRows;
     }
 
     // Finalize Location Metrics
@@ -296,14 +296,14 @@ export function analyzeInventory(data) {
         const loc = analysis.locationReport[name];
         loc.accuracy = (loc.matched / loc.totalItems) * 100;
         loc.riskScore = ((loc.missing * 3) + (loc.extra * 1)) / loc.totalItems;
-        
+
         // Calculate most common location status
         if (loc.locationStatuses && loc.locationStatuses.length > 0) {
             const statusCounts = {};
             loc.locationStatuses.forEach(status => {
                 statusCounts[status] = (statusCounts[status] || 0) + 1;
             });
-            loc.mostCommonStatus = Object.keys(statusCounts).reduce((a, b) => 
+            loc.mostCommonStatus = Object.keys(statusCounts).reduce((a, b) =>
                 statusCounts[a] > statusCounts[b] ? a : b
             );
         } else {
@@ -343,6 +343,7 @@ export function analyzeInventory(data) {
             action: 'Urgent Audit & Removal'
         });
     }
+
     // Accuracy alert disabled
     // if (analysis.kpis.overallAccuracy < 90) {
     //     analysis.alerts.push({

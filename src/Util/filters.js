@@ -9,17 +9,18 @@ export function applyFilters(products, filters = {}) {
     if (filters.search) {
         const query = filters.search.toLowerCase();
         result = result.filter(p =>
-            (p.ProductCode && p.ProductCode.toLowerCase().includes(query)) ||
-            (p.ProductName && p.ProductName.toLowerCase().includes(query)) ||
-            (p.BreadfastID && p.BreadfastID.toLowerCase().includes(query))
+            (p.ProductCode && String(p.ProductCode).toLowerCase().includes(query)) ||
+            (p.ProductName && String(p.ProductName).toLowerCase().includes(query)) ||
+            (p.BreadfastID && String(p.BreadfastID).toLowerCase().includes(query))
         );
     }
 
     if (filters.category) {
         if (filters.category === '(Blank)') {
-            result = result.filter(p => !p.Category || p.Category === '' || p.Category === '(Blank)');
+            result = result.filter(p => !p.Category || String(p.Category).trim() === '' || p.Category === '(Blank)');
         } else {
-            result = result.filter(p => p.Category === filters.category);
+            const filterCat = String(filters.category).trim().toLowerCase();
+            result = result.filter(p => p.Category && String(p.Category).trim().toLowerCase() === filterCat);
         }
     }
 

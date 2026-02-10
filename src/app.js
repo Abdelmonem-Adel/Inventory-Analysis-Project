@@ -1,5 +1,4 @@
 import express from 'express';
-;
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import { readSheet } from "../services/sheet.service.js";
 import inventoryRoutes from './routes/inventory.routes.js';

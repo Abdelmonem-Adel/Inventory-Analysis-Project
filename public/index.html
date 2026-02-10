@@ -21,8 +21,11 @@
                     <button onclick="switchTab('inventory')" id="tab-inventory" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-blue-600 text-white shadow-md">
                         Inventory View
                     </button>
+                    <button onclick="switchTab('location')" id="tab-location" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
+                        Location View
+                    </button>
                     <button onclick="switchTab('audit')" id="tab-audit" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
-                        Smart Audit Engine
+                        Audit View
                     </button>
                 </div>
             </div>
@@ -34,22 +37,60 @@
         <!-- Inventory View -->
         <div id="view-inventory" class="block">
             <!-- KPI Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div class="glass p-6 rounded-lg border border-white shadow-sm">
-                    <p class="text-sm text-slate-500 font-medium">Total Products</p>
-                    <h3 id="totalProducts" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+            <!-- KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Stability Score</p>
+                    <h3 id="invAccuracy" class="text-4xl font-extrabold text-slate-900 mt-1">0%</h3>
+                    <div class="w-full bg-slate-100 h-2 rounded-full mt-3">
+                        <div id="invAccuracyBar" class="bg-blue-600 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
                 </div>
-                <div class="glass p-6 rounded-lg border border-white shadow-sm">
-                    <p class="text-sm text-slate-500 font-medium">Total Quantity</p>
-                    <h3 id="totalQuantity" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (Count)</p>
+                    <h3 id="invMatched" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                <div class="glass p-6 rounded-lg border border-blue-100 shadow-sm">
-                    <p class="text-sm text-blue-600 font-medium">Daily Growth (Items)</p>
-                    <h3 id="growthCount" class="text-3xl font-bold text-blue-700 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (Count)</p>
+                    <h3 id="invExtra" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                <div class="glass p-6 rounded-lg border border-red-100 shadow-sm">
-                    <p class="text-sm text-red-600 font-medium">Daily Decrease (Items)</p>
-                    <h3 id="shrinkCount" class="text-3xl font-bold text-red-700 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (Count)</p>
+                    <h3 id="invMissing" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+            </div>
+
+            <!-- Inventory Counts (Sum) -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-[-1rem]">
+                <div class="invisible md:block"></div> <!-- Spacer to align with counts -->
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (Sum => per Unit)</p>
+                    <h3 id="invMatchedSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (Sum => per Unit)</p>
+                    <h3 id="invExtraSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (Sum => per Unit)</p>
+                    <h3 id="invMissingSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+            </div>
+
+            <!-- Inventory Counts (%) -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-[-1rem]">
+                <div class="invisible md:block"></div> <!-- Spacer to align with counts -->
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (%Percentage)</p>
+                    <h3 id="invMatchedPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (%Percentage)</p>
+                    <h3 id="invExtraPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (%Percentage)</p>
+                    <h3 id="invMissingPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
                 </div>
             </div>
 
@@ -131,12 +172,12 @@
                 </div>
             </div>
 
-            <div class="flex flex-col gap-8">
+            <div class="flex flex-col gap-8 ">
                 <div class="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                        <h2 class="font-bold text-slate-800">Current Inventory</h2>
+                        <h2 class="font-bold text-slate-800">📦Current Inventory</h2>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto max-h-96">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-slate-50">
@@ -164,6 +205,23 @@
                         Select a product from the table to view its daily snapshot history.
                     </div>
                 </div>
+
+                <!-- Category Analysis Section -->
+                <div id="category-analysis-section" class="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                        <div>
+                            <h2 class="font-bold text-slate-800 text-lg">📈Category Analysis</h2>
+                            <p class="text-sm text-slate-500">View aggregate inventory trends by category</p>
+                        </div>
+                    </div>
+
+                    <div class="h-96">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                    <div id="categoryChartMeta" class="mt-4 text-sm text-slate-500">
+                        Showing total quantity trend for the selected category based on current filtered data.
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -176,8 +234,8 @@
 
 
 
-        <!-- Smart Audit View -->
-        <div id="view-audit" class="hidden">
+        <!-- Location View (formerly Smart Audit) -->
+        <div id="view-location" class="hidden">
             
             <!-- Audit Alerts -->
             <div id="auditAlerts" class="space-y-3 mb-8"></div>
@@ -324,31 +382,43 @@
 
             <!-- Row 3: Detailed Discrepancy Drill-down -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
-                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col gap-4">
                     <div class="flex items-center">
                         <span class="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
-                        <h3 class="font-bold text-slate-800">Location & Category Drill-down</h3>
+                        <h3 class="font-bold text-slate-800">Location & Category Drill-down</h3> 
                     </div>
                     
-                    <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                        <div class="relative flex-1 md:w-64">
-                            <input type="text" id="auditSearchInput" placeholder="Search by Product or Location..." 
-                                class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all outline-none">
+                    <div class="flex flex-wrap items-center gap-3 w-full">
+                        <!-- Search Bar -->
+                        <div class="relative w-full md:w-80">
+                            <input type="text" id="auditSearchInput" placeholder="Search by Product, Location, or Barcode..." 
+                                class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all outline-none shadow-sm">
                             <svg class="w-4 h-4 absolute left-3 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
                         </div>
+
                         <div class="flex items-center gap-2">
-                            <input type="date" id="auditDateFrom" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500" />
-                            <input type="date" id="auditDateTo" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500" />
+                            <input type="date" id="auditDateFrom" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
+                            <input type="date" id="auditDateTo" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
                             <button id="auditDateClear" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors">Clear</button>
                         </div>
-                        <select id="auditStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500">
+
+                        <select id="auditCategoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
+                            <option value="all">All Categories</option>
+                        </select>
+
+                        <select id="auditStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
                             <option value="all">All Statuses</option>
                             <option value="extra">Extra Only</option>
                             <option value="missing">Missing Only</option>
                         </select>
-                        <span class="text-xs text-slate-500 font-medium whitespace-nowrap" id="auditResultCount">Showing 0 rows</span>
+
+                        <button id="applyAuditFilters" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-md">
+                            Apply Filter
+                        </button>
+
+                        <span class="text-xs text-slate-500 font-medium ml-auto" id="auditResultCount">Showing 0 rows</span>
                     </div>
                 </div>
                 <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -381,6 +451,22 @@
                 </div>
             </div>
 
+        </div>
+
+
+
+
+
+
+
+
+
+
+
+
+        
+        <!-- Audit View (Staff Analysis) -->
+        <div id="view-audit" class="hidden">
             <!-- Row 4: Staff Performance -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
                 <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -414,7 +500,7 @@
                                 <th class="px-6 py-4">Staff Name</th>
                                 <th class="px-6 py-4 text-center">Items Counted</th>
                                 <th class="px-6 py-4 text-center text-green-600">Matches</th>
-                                <th class="px-6 py-4 text-center text-red-600">Human Miss (Missing)</th>
+                                <th class="px-6 py-4 text-center text-red-600">Human Error</th>
                                 <th class="px-6 py-4">Accuracy Rate</th>
                             </tr>
                         </thead>
@@ -489,5 +575,6 @@
     </div>
 
     <script src="index.js"></script>
+    <script src="init.js"></script>
 </body>
 </html>
