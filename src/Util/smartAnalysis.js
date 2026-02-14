@@ -107,7 +107,7 @@ export function analyzeInventory(data) {
 
         // 1. Normalize Status for KPIs
         const productStatusRaw = String(findVal(['productstatus', 'status', 'matchstatus', 'discrepancy']) || '').toLowerCase();
-        const empAccuracyRaw = String(findVal(['employeeaccuracy', 'staffaccuracy', 'workeraccuracy']) || '').toLowerCase().trim();
+        const empAccuracyRaw = String(findVal(['employeestatus', 'employeeaccuracy', 'staffstatus', 'staffaccuracy', 'workeraccuracy']) || '').toLowerCase().trim();
 
         let normalizedStatus = 'unknown';
 
@@ -125,8 +125,8 @@ export function analyzeInventory(data) {
             else if (physicalQty < systemQty) normalizedStatus = 'missing';
         }
 
-        // Staff Analysis Status (Strictly based on Employee Accuracy column)
-        let staffStatus = 'match'; // Default to match
+        // Staff Analysis Status (Based on Employee Accuracy column, fallback to normalizedStatus)
+        let staffStatus = normalizedStatus; // Default to normalizedStatus
         if (empAccuracyRaw !== '') {
             const isExplicitMatch = empAccuracyRaw.includes('match') || empAccuracyRaw.includes('مطابق') || empAccuracyRaw.includes('100') || empAccuracyRaw === 'ok';
             if (isExplicitMatch) {
@@ -152,7 +152,7 @@ export function analyzeInventory(data) {
         const loc = analysis.locationReport[location];
 
         // Capture location status from the row
-        const locationStatus = findVal(['locatonstatus', 'locationstatus', 'locstatus']);
+        const locationStatus = findVal(['locatonstatus', 'locationstatus', 'locstatus', 'locaton status', 'location status']);
         if (locationStatus) {
             loc.locationStatuses.push(locationStatus);
         }
@@ -242,6 +242,10 @@ export function analyzeInventory(data) {
         if (staffStatus === 'match') analysis.staffReport[staffName].match++;
         else if (staffStatus === 'extra') analysis.staffReport[staffName].extra++;
         else if (staffStatus === 'missing') analysis.staffReport[staffName].missing++;
+        else if (staffStatus === 'error' || staffStatus === 'unknown') {
+            // Human Error or unknown - not counted as match
+            // extra/missing already incremented above if normalizedStatus was used
+        }
 
         // 7. Discrepancy Drill-down (Now includes all rows per user request)
         if (true) {
@@ -259,6 +263,7 @@ export function analyzeInventory(data) {
             const productStatus = findVal(['productstatus', 'itemstatus']);
             const createdBy = findVal(['creaitedby', 'createdby', 'ceraitedby', 'addedby']);
             const employeeAccuracy = findVal(['employeeaccuracy', 'staffaccuracy', 'workeraccuracy']);
+            const employeeStatus = findVal(['employeestatus', 'empstatus', 'staffstatus']);
             const live = findVal(['live', 'active', 'status']);
             const liveWait = findVal(['livewait', 'waittime', 'pending']);
 
@@ -293,6 +298,7 @@ export function analyzeInventory(data) {
                 createdBy: createdBy || 'N/A',
                 staffName,
                 employeeAccuracy: employeeAccuracy || 'N/A',
+                employeeStatus: employeeStatus || 'N/A',
 
                 // Live Status
                 live: live || 'N/A',

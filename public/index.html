@@ -19,7 +19,7 @@
                 <h1 class="text-3xl font-bold text-slate-900">📊Inventory Analysis</h1>
                 <div class="flex gap-4 mt-3">
                     <button onclick="switchTab('inventory')" id="tab-inventory" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-blue-600 text-white shadow-md">
-                        Inventory View
+                        Product View
                     </button>
                     <button onclick="switchTab('location')" id="tab-location" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
                         Location View
@@ -81,7 +81,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-[-1rem]">
                 <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Stability Score</p>
+                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Overall Accuracy</p>
                     <h3 id="invAccuracy" class="text-2xl font-bold text-slate-900 mt-1">0%</h3>
                     <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3">
                         <div id="invAccuracyBar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
@@ -258,17 +258,17 @@
                         <div id="accuracyBar" class="bg-blue-600 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
                     </div>
                 </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched Items (Count)</p>
-                    <h3 id="auditMatched" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-blue-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Locations</p>
+                    <h3 id="auditTotalLocations" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (Count)</p>
-                    <h3 id="auditExtra" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Match</p>
+                    <h3 id="auditTotalMatch" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (Count)</p>
-                    <h3 id="auditMissing" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Not Match</p>
+                    <h3 id="auditTotalNotMatch" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
             </div>
 
@@ -278,7 +278,7 @@
 
                 <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 place-content-end w-full">
                 <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (Sum => per Unite)</p>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (Sum => per Unite)</p>
                     <h3 id="auditMissingCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 
@@ -297,9 +297,11 @@
 
 
             <!-- Audit Counts (%) -->
-            <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="flex justify-end">
+
+                <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 place-content-end w-full">
                 <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (%Percentage)</p>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (%Percentage)</p>
                     <h3 id="auditMissingPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 
@@ -307,20 +309,65 @@
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (%Percentage)</p>
                     <h3 id="auditExtraPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                
                 <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched Items (%Percentage)</p>
                     <h3 id="auditMatchedPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
             </div>
 
+             </div>
+
             <!-- Row 1: Location Accuracy (Full Width) -->
             <div class="mb-8">
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <h3 class="font-bold text-slate-800 mb-6 flex items-center text-xl">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center text-xl">
                         <span class="w-2 h-8 bg-blue-600 rounded mr-3"></span>
                         Location Per Item Count
                     </h3>
+                    
+                    <!-- Filters -->
+                    <div class="flex flex-wrap items-center gap-3 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <!-- Search by Product Name -->
+                        <div class="relative w-full md:w-48">
+                            <input type="text" id="locationProductSearch" placeholder="Product Name..." 
+                                class="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <svg class="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                        <!-- Search by ID -->
+                        <div class="relative w-full md:w-40">
+                            <input type="text" id="locationIdSearch" placeholder="Item ID..." 
+                                class="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono">
+                            <svg class="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
+                            </svg>
+                        </div>
+                        <!-- Sort By -->
+                        <select id="locationSortBy" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <option value="locations">Most Locations</option>
+                            <option value="topMatch">Top Match</option>
+                            <option value="topNotMatch">Top Not Match</option>
+                        </select>
+                        <!-- Date From -->
+                        <div class="flex items-center gap-1">
+                            <label class="text-xs text-slate-500">From:</label>
+                            <input type="date" id="locationDateFrom" class="px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <!-- Date To -->
+                        <div class="flex items-center gap-1">
+                            <label class="text-xs text-slate-500">To:</label>
+                            <input type="date" id="locationDateTo" class="px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <!-- Apply Button -->
+                        <button id="applyLocationFilters" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors">
+                            Apply
+                        </button>
+                        <!-- Clear Button -->
+                        <button id="clearLocationFilters" class="px-3 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-300 transition-colors">
+                            Clear
+                        </button>
+                    </div>
                     
                     <!-- Detailed Table (Full Width) -->
                     <div class="overflow-auto max-h-96">
@@ -381,7 +428,7 @@
                 <!-- Problematic Products -->
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 border-b border-slate-100 bg-slate-50">
-                        <h3 class="font-bold text-slate-800">⚠️ Repeat Discrepancy Items</h3>
+                        <h3 class="font-bold text-slate-800">⚠️ Top 5 Not Match Items</h3>
                     </div>
                     <div id="problematicList" class="p-4 space-y-4">
                         <!-- Problem products -->

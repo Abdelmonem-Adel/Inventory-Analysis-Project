@@ -135,77 +135,158 @@ function updateAuditDashboard(data) {
         </div>
     `).join('');
 
+    // Calculate Location-based KPIs from discrepancies (per row/item)
+    const discrepancies = data.discrepanciesArr || [];
+    const totalItems = discrepancies.length;
+    let totalMatchItems = 0;
+    let totalNotMatchItems = 0;
+    
+    // Track unique locations
+    const allLocations = new Set();
+    const matchLocations = new Set();
+    const notMatchLocations = new Set();
+
+    discrepancies.forEach(d => {
+        const status = String(d.locationStatus || '').toLowerCase().trim();
+        const location = d.location || 'Unknown';
+        
+        allLocations.add(location);
+        
+        if (status.includes('match') || status.includes('مطابق') || status === 'ok') {
+            totalMatchItems++;
+            matchLocations.add(location);
+        } else if (status.includes('extra') || status.includes('زيادة') || 
+                   status.includes('loss') || status.includes('miss') || status.includes('ناقص') ||
+                   status === '+' || status === '-') {
+            totalNotMatchItems++;
+            notMatchLocations.add(location);
+        }
+    });
+
+    // Location-based Accuracy
+    const locationAccuracy = totalItems > 0 ? (totalMatchItems / totalItems) * 100 : 0;
+
     // KPIs
-    document.getElementById('auditAccuracy').innerText = `${data.kpis.overallAccuracy.toFixed(0)}%`;
-    document.getElementById('accuracyBar').style.width = `${data.kpis.overallAccuracy}%`;
-    document.getElementById('auditMatched').innerText = data.kpis.totalMatched.toLocaleString();
-    document.getElementById('auditExtra').innerText = data.kpis.totalExtra.toLocaleString();
-    document.getElementById('auditMissing').innerText = data.kpis.totalMissing.toLocaleString();
+    document.getElementById('auditAccuracy').innerText = `${locationAccuracy.toFixed(0)}%`;
+    document.getElementById('accuracyBar').style.width = `${locationAccuracy}%`;
+    document.getElementById('auditTotalLocations').innerHTML = `${totalItems.toLocaleString()} <span class="text-sm text-slate-500">(${allLocations.size} unique)</span>`;
+    document.getElementById('auditTotalMatch').innerHTML = `${totalMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${matchLocations.size} unique)</span>`;
+    document.getElementById('auditTotalNotMatch').innerHTML = `${totalNotMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${notMatchLocations.size} unique)</span>`;
 
-    // Audit Counts
-    const matchedQty = data.kpis.physicalQtyMatched || 0;
-    const extraQty = data.kpis.physicalQtyExtra || 0;
-    const missingQty = data.kpis.physicalQtyMissing || 0;
-    const matchedPct = data.kpis.matchedPercentage || 0;
-    const extraPct = data.kpis.extraPercentage || 0;
-    const missingPct = data.kpis.missingPercentage || 0;
+    // Calculate Sum per Unite and Percentage based on Location Status
+    let matchQtySum = 0;
+    let extraQtySum = 0;
+    let lossQtySum = 0;
+    let matchCount = 0;
+    let extraCount = 0;
+    let lossCount = 0;
 
+    discrepancies.forEach(d => {
+        const status = String(d.locationStatus || '').toLowerCase().trim();
+        const qty = parseFloat(d.physicalQty) || 0;
+        
+        if (status.includes('match') || status.includes('مطابق') || status === 'ok') {
+            matchQtySum += qty;
+            
+            matchCount++;
+        } else if (status.includes('extra') || status.includes('زيادة') || status === '+') {
+            extraQtySum += qty;
+            extraCount++;
+        } else if (status.includes('loss') || status.includes('miss') || status.includes('ناقص') || status === '-') {
+            lossQtySum += qty;
+            lossCount++;
+        }
+    });
 
+    // Calculate percentages based on Sum per Unite: (qtySum / totalQtySum) * 100
+    const totalQtySum = matchQtySum + extraQtySum + lossQtySum;
+    const matchPctRaw = totalQtySum > 0 ? (matchQtySum / totalQtySum) * 100 : 0;
+    const extraPctRaw = totalQtySum > 0 ? (extraQtySum / totalQtySum) * 100 : 0;
+    const lossPctRaw = totalQtySum > 0 ? (lossQtySum / totalQtySum) * 100 : 0;
 
-    document.getElementById('auditMatchedCount').innerText = matchedQty.toLocaleString();
-    document.getElementById('auditExtraCount').innerText = extraQty.toLocaleString();
-    document.getElementById('auditMissingCount').innerText = missingQty.toLocaleString();
+    document.getElementById('auditMatchedCount').innerText = matchQtySum.toLocaleString();
+    document.getElementById('auditExtraCount').innerText = extraQtySum.toLocaleString();
+    document.getElementById('auditMissingCount').innerText = lossQtySum.toLocaleString();
 
-    document.getElementById('auditMatchedPercentage').innerText = `${matchedPct.toFixed(0)}%`;
-    document.getElementById('auditExtraPercentage').innerText = `${extraPct.toFixed(0)}%`;
-    document.getElementById('auditMissingPercentage').innerText = `${missingPct.toFixed(0)}%`;
+    document.getElementById('auditMatchedPercentage').innerText = `${matchPctRaw.toFixed(1)}%`;
+    document.getElementById('auditExtraPercentage').innerText = `${extraPctRaw.toFixed(1)}%`;
+    document.getElementById('auditMissingPercentage').innerText = `${lossPctRaw.toFixed(1)}%`;
 
 
 
 
     // Items with their Locations Table
     const locationTable = document.getElementById('locationDetailsTable');
-    const productEntries = Object.entries(data.productReport || {})
-        .sort((a, b) => b[1].locations.length - a[1].locations.length); // Sort by number of locations
+    const discList = data.discrepanciesArr || [];
 
-    // Save data in global variable
+    // Save data in global variable including discrepancies for each product
     window.productLocationsData = {};
+    window.locationTableFullData = [];
 
-    locationTable.innerHTML = productEntries.map(([productId, prod]) => {
-        // Save data in global variable
+    // Build full data with match/notmatch counts
+    Object.entries(data.productReport || {}).forEach(([productId, prod]) => {
+        const productDisc = discList.filter(d => 
+            String(d.productId || '').toLowerCase() === String(prod.itemId || productId || '').toLowerCase()
+        );
+        
+        let matchCount = 0;
+        let notMatchCount = 0;
+        let latestDate = null;
+        
+        productDisc.forEach(d => {
+            const status = String(d.locationStatus || '').toLowerCase();
+            if (status.includes('match') && !status.includes('not') || status.includes('مطابق')) {
+                matchCount++;
+            } else if (status.includes('extra') || status.includes('loss') || status.includes('زيادة') || status.includes('نقص')) {
+                notMatchCount++;
+            }
+            // Parse date
+            const recordDate = parseFlexDate(d.dateNow);
+            if (recordDate && (!latestDate || recordDate > latestDate)) {
+                latestDate = recordDate;
+            }
+        });
+        
         window.productLocationsData[productId] = {
             name: prod.name,
-            locations: prod.locations
+            locations: prod.locations,
+            details: productDisc.map(d => ({
+                location: d.location,
+                finalQty: d.physicalQty || d.finalQty || 0,
+                sysQty: d.systemQty || 0,
+                locationStatus: d.locationStatus || 'N/A',
+                dateNow: d.dateNow
+            }))
         };
+        
+        window.locationTableFullData.push({
+            productId,
+            name: prod.name,
+            itemId: prod.itemId || productId,
+            locations: prod.locations,
+            locationsCount: prod.locations.length,
+            matchCount,
+            notMatchCount,
+            latestDate,
+            discrepancies: productDisc
+        });
+    });
 
-        return `
-        <tr class="hover:bg-slate-50 transition-colors">
-            <td class="px-4 py-3 font-bold text-slate-800">${prod.name}</td>
-            <td class="px-4 py-3 text-center font-mono text-slate-600">${prod.itemId || productId}</td>
-            <td class="px-4 py-3 text-center">
-                <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
-                    ${prod.locations.length}
-                </span>
-            </td>
-            <td class="px-4 py-3 text-center">
-                <button onclick="showLocationsModal('${productId}')" 
-                        class="px-3 py-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
-                    View
-                </button>
-            </td>
-        </tr>
-    `;
-    }).join('');
+    // Initial render with default sort
+    renderLocationTable(window.locationTableFullData, 'locations');
+    
+    // Setup location filters
+    setupLocationFilters();
 
-    // Status Distribution Chart
+    // Status Distribution Chart (based on Location Status: match, extra, loss)
     const distCtx = document.getElementById('statusDistChart').getContext('2d');
     if (auditCharts.distribution) auditCharts.distribution.destroy();
     auditCharts.distribution = new Chart(distCtx, {
         type: 'doughnut',
         data: {
-            labels: data.chartData.statusDistribution.labels,
+            labels: ['Match', 'Extra', 'Loss'],
             datasets: [{
-                data: data.chartData.statusDistribution.datasets,
+                data: [matchCount, extraCount, lossCount],
                 backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
                 borderWidth: 0
             }]
@@ -235,18 +316,54 @@ function updateAuditDashboard(data) {
         </tr>
     `).join('');
 
-    // Problematic Products
+    // Top 5 Items with Most Not Match Locations (Extra or Loss)
     const problematicDiv = document.getElementById('problematicList');
-    const stabilityInsights = data.insights.find(i => i.type === 'product_stability');
-    if (stabilityInsights) {
-        problematicDiv.innerHTML = stabilityInsights.details.map(name => `
-            <div class="flex items-center p-3 bg-red-50 border border-red-100 rounded-lg">
-                <div class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center mr-3 font-bold text-xs">!</div>
-                <span class="text-sm font-medium text-slate-700">${name}</span>
+    const itemNotMatchCounts = {};
+    
+    discList.forEach(d => {
+        const productId = d.productId || 'Unknown';
+        const productName = d.product || productId;
+        const status = String(d.locationStatus || '').toLowerCase();
+        const isNotMatch = status.includes('extra') || status.includes('loss') || status.includes('زيادة') || status.includes('نقص');
+        
+        if (!itemNotMatchCounts[productId]) {
+            itemNotMatchCounts[productId] = { name: productName, extra: 0, loss: 0, total: 0 };
+        }
+        
+        if (isNotMatch) {
+            itemNotMatchCounts[productId].total++;
+            if (status.includes('extra') || status.includes('زيادة')) {
+                itemNotMatchCounts[productId].extra++;
+            } else if (status.includes('loss') || status.includes('نقص')) {
+                itemNotMatchCounts[productId].loss++;
+            }
+        }
+    });
+    
+    const topNotMatchItems = Object.entries(itemNotMatchCounts)
+        .filter(([id, counts]) => counts.total > 0)
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 5);
+    
+    if (topNotMatchItems.length > 0) {
+        problematicDiv.innerHTML = topNotMatchItems.map(([id, counts], index) => `
+            <div class="p-3 bg-red-50 border border-red-100 rounded-lg">
+                <div class="flex items-start mb-2">
+                    <div class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center mr-3 font-bold text-sm flex-shrink-0">${index + 1}</div>
+                    <div>
+                        <p class="text-sm font-medium text-slate-700">${counts.name}</p>
+                        <p class="text-xs text-slate-400 font-mono">${id}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 ml-11">
+                    <span class="px-2 py-1 text-xs font-bold text-orange-700 bg-orange-100 rounded">Extra: ${counts.extra}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-red-700 bg-red-100 rounded">Loss: ${counts.loss}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-white bg-red-600 rounded">Total: ${counts.total}</span>
+                </div>
             </div>
         `).join('');
     } else {
-        problematicDiv.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No recurring stability issues detected.</p>';
+        problematicDiv.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No discrepancy items found.</p>';
     }
 
     // Staff Performance Table
@@ -286,7 +403,7 @@ function setupAuditFilters() {
                 (String(d.staffName || '').toLowerCase()).includes(searchTerm) ||
                 (String(d.barcode || '').toLowerCase()).includes(searchTerm);
 
-            const statusTerm = (d.locationStatus || '').toLowerCase();
+            const statusTerm = String(d.locationStatus || '').toLowerCase();
             const matchesStatus =
                 statusVal === 'all' ||
                 statusTerm.includes(statusVal);
@@ -363,7 +480,7 @@ function renderDiscrepancyTable(discrepancies) {
                 </span>
             </td>
             <td class="px-3 py-3 font-medium text-slate-800">${d.staffName}</td>
-            <td class="px-3 py-3 text-center text-slate-400">${d.employeeAccuracy}</td>
+            <td class="px-3 py-3 text-center text-slate-400">${d.employeeStatus || d.employeeAccuracy}</td>
             <td class="px-3 py-3 text-slate-400 text-[10px]">${d.live}</td>
 
             <td class="px-3 py-3 text-slate-400 text-[10px]">${d.liveWait}</td>
@@ -551,11 +668,11 @@ function updateCategoryChart(products) {
     const trends = {}; // { date: { matched: 0, extra: 0, missing: 0 } }
 
     const isExtra = (s) => {
-        const st = (s || '').toLowerCase().trim();
+        const st = String(s || '').toLowerCase().trim();
         return st.includes('extra') || st.includes('increased') || st.includes('زيادة') || st.includes('فائض') || st === '+';
     };
     const isMissing = (s) => {
-        const st = (s || '').toLowerCase().trim();
+        const st = String(s || '').toLowerCase().trim();
         return st.includes('missing') || st.includes('decreased') || st.includes('ناقص') || st.includes('عجز') || st === '-';
     };
 
@@ -739,11 +856,81 @@ function showLocationsModal(productId) {
     document.getElementById('locModalTitle').innerText = `Locations for: ${productData.name}`;
     const locationsListBody = document.getElementById('locationsListBody');
 
-    locationsListBody.innerHTML = productData.locations.map(loc => `
-        <div class="p-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-slate-100 transition-colors">
-            <p class="font-semibold text-slate-800">${loc}</p>
-        </div>
-    `).join('');
+    // Use details if available, otherwise fallback to simple locations
+    if (productData.details && productData.details.length > 0) {
+        // Count status types
+        let matchCount = 0, extraCount = 0, lossCount = 0;
+        productData.details.forEach(detail => {
+            const status = String(detail.locationStatus || '').toLowerCase();
+            if (status.includes('match')) matchCount++;
+            else if (status.includes('extra')) extraCount++;
+            else if (status.includes('loss')) lossCount++;
+        });
+
+        // Calculate Accuracy
+        const totalCount = matchCount + extraCount + lossCount;
+        const accuracy = totalCount > 0 ? ((matchCount / totalCount) * 100).toFixed(1) : 0;
+
+        // Summary header
+        const summaryHtml = `
+            <div class="flex flex-col gap-3 mb-4 p-3 bg-slate-100 rounded-lg">
+                <div class="flex justify-center items-center gap-2">
+                    <span class="text-sm font-semibold text-slate-600">Accuracy:</span>
+                    <span class="text-2xl font-bold ${accuracy >= 80 ? 'text-green-600' : accuracy >= 50 ? 'text-orange-600' : 'text-red-600'}">${accuracy}%</span>
+                </div>
+                <div class="flex gap-4 justify-center">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-700">Match</span>
+                        <span class="font-bold text-slate-800">${matchCount}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 text-xs font-bold rounded bg-orange-100 text-orange-700">Extra</span>
+                        <span class="font-bold text-slate-800">${extraCount}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-700">Loss</span>
+                        <span class="font-bold text-slate-800">${lossCount}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const detailsHtml = productData.details.map(detail => {
+            const status = String(detail.locationStatus || '').toLowerCase();
+            const statusClass = status.includes('match') ? 'bg-green-100 text-green-700' :
+                                status.includes('extra') ? 'bg-orange-100 text-orange-700' :
+                                status.includes('loss') ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
+            
+            return `
+            <div class="p-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-slate-100 transition-colors">
+                <div class="flex justify-between items-center mb-2">
+                    <p class="font-semibold text-slate-800">${detail.location}</p>
+                    <span class="px-2 py-1 text-xs font-bold rounded ${statusClass}">
+                        ${detail.locationStatus}
+                    </span>
+                </div>
+                <div class="flex gap-4 text-sm">
+                    <div>
+                        <span class="text-slate-500">Physical QTY:</span>
+                        <span class="font-bold text-slate-800 ml-1">${detail.finalQty}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500">Sys QTY:</span>
+                        <span class="font-bold text-slate-600 ml-1">${detail.sysQty}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        }).join('');
+
+        locationsListBody.innerHTML = summaryHtml + detailsHtml;
+    } else {
+        locationsListBody.innerHTML = productData.locations.map(loc => `
+            <div class="p-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-slate-100 transition-colors">
+                <p class="font-semibold text-slate-800">${loc}</p>
+            </div>
+        `).join('');
+    }
 
     // Show Modal
     const modal = document.getElementById('locationsModal');
@@ -796,6 +983,100 @@ function setupDateFilterListeners() {
 
 // Attach date filter listeners after page loads
 setTimeout(setupDateFilterListeners, 500);
+
+// Location Table Render Function
+function renderLocationTable(data, sortBy = 'locations') {
+    const locationTable = document.getElementById('locationDetailsTable');
+    
+    // Sort data based on sortBy
+    let sortedData = [...data];
+    if (sortBy === 'topMatch') {
+        sortedData.sort((a, b) => b.matchCount - a.matchCount);
+    } else if (sortBy === 'topNotMatch') {
+        sortedData.sort((a, b) => b.notMatchCount - a.notMatchCount);
+    } else {
+        sortedData.sort((a, b) => b.locationsCount - a.locationsCount);
+    }
+    
+    locationTable.innerHTML = sortedData.map(item => `
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-4 py-3 font-bold text-slate-800">${item.name}</td>
+            <td class="px-4 py-3 text-center font-mono text-slate-600">${item.itemId}</td>
+            <td class="px-4 py-3 text-center">
+                <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
+                    ${item.locationsCount}
+                </span>
+            </td>
+            <td class="px-4 py-3 text-center">
+                <button onclick="showLocationsModal('${item.productId}')" 
+                        class="px-3 py-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                    View
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Setup Location Filters
+function setupLocationFilters() {
+    const productSearch = document.getElementById('locationProductSearch');
+    const idSearch = document.getElementById('locationIdSearch');
+    const sortBy = document.getElementById('locationSortBy');
+    const dateFrom = document.getElementById('locationDateFrom');
+    const dateTo = document.getElementById('locationDateTo');
+    const applyBtn = document.getElementById('applyLocationFilters');
+    const clearBtn = document.getElementById('clearLocationFilters');
+    
+    if (!applyBtn) return;
+    
+    function applyFilters() {
+        const productTerm = (productSearch?.value || '').toLowerCase();
+        const idTerm = (idSearch?.value || '').toLowerCase();
+        const sortVal = sortBy?.value || 'locations';
+        const startDate = parseInputDate(dateFrom?.value, false) || new Date(1900, 0, 1);
+        const endDate = parseInputDate(dateTo?.value, true) || new Date(2099, 11, 31);
+        const hasDateFilter = dateFrom?.value || dateTo?.value;
+        
+        let filtered = window.locationTableFullData.filter(item => {
+            // Product name filter
+            const matchesProduct = !productTerm || item.name.toLowerCase().includes(productTerm);
+            
+            // ID filter
+            const matchesId = !idTerm || item.itemId.toLowerCase().includes(idTerm);
+            
+            // Date filter - check if any discrepancy falls within date range
+            let matchesDate = true;
+            if (hasDateFilter) {
+                matchesDate = item.discrepancies.some(d => {
+                    const recordDate = parseFlexDate(d.dateNow);
+                    return recordDate && recordDate >= startDate && recordDate <= endDate;
+                });
+            }
+            
+            return matchesProduct && matchesId && matchesDate;
+        });
+        
+        renderLocationTable(filtered, sortVal);
+    }
+    
+    applyBtn.addEventListener('click', applyFilters);
+    
+    clearBtn?.addEventListener('click', () => {
+        if (productSearch) productSearch.value = '';
+        if (idSearch) idSearch.value = '';
+        if (sortBy) sortBy.value = 'locations';
+        if (dateFrom) dateFrom.value = '';
+        if (dateTo) dateTo.value = '';
+        renderLocationTable(window.locationTableFullData, 'locations');
+    });
+    
+    // Apply on Enter key
+    [productSearch, idSearch].forEach(input => {
+        input?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') applyFilters();
+        });
+    });
+}
 
 // Staff Table
 function renderStaffTable(staffData) {
@@ -983,8 +1264,8 @@ function filterStaffByDate() {
         }
         filteredStaffData[staffName].total++;
 
-        // Use employeeAccuracy column (same logic as smartAnalysis.js)
-        const empAccuracyRaw = String(d.employeeAccuracy || '').toLowerCase().trim();
+        // Use employeeStatus column (same logic as smartAnalysis.js)
+        const empAccuracyRaw = String(d.employeeStatus || d.employeeAccuracy || '').toLowerCase().trim();
         const isMatch = empAccuracyRaw.includes('match') || empAccuracyRaw.includes('مطابق') || empAccuracyRaw.includes('100') || empAccuracyRaw === 'ok';
         
         if (isMatch) {
