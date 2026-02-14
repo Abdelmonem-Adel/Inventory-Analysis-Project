@@ -28,13 +28,22 @@ export function applyFilters(products, filters = {}) {
         result = result.filter(p => p.Warehouse === filters.warehouse);
     }
 
-    // Smart Filters
+    // Smart Filters - Sync with KPI logic (text-based status)
+    const isExtra = (s) => {
+        const status = (s || '').toLowerCase().trim();
+        return status.includes('extra') || status.includes('increased') || status.includes('زيادة') || status.includes('فائض') || status.includes('بزيادة') || status === '+';
+    };
+    const isMissing = (s) => {
+        const status = (s || '').toLowerCase().trim();
+        return status.includes('missing') || status.includes('decreased') || status.includes('ناقص') || status.includes('عجز') || status.includes('بعجز') || status === '-';
+    };
+
     if (filters.type === 'increased') {
-        result = result.filter(p => p.lastDiff > 0);
+        result = result.filter(p => isExtra(p.ProductStatus));
     } else if (filters.type === 'decreased') {
-        result = result.filter(p => p.lastDiff < 0);
+        result = result.filter(p => isMissing(p.ProductStatus));
     } else if (filters.type === 'stable') {
-        result = result.filter(p => p.lastDiff === 0);
+        result = result.filter(p => !isExtra(p.ProductStatus) && !isMissing(p.ProductStatus));
     }
 
     if (filters.highMovement) {

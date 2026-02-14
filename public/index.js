@@ -136,7 +136,7 @@ function updateAuditDashboard(data) {
     `).join('');
 
     // KPIs
-    document.getElementById('auditAccuracy').innerText = `${data.kpis.overallAccuracy.toFixed(1)}%`;
+    document.getElementById('auditAccuracy').innerText = `${data.kpis.overallAccuracy.toFixed(0)}%`;
     document.getElementById('accuracyBar').style.width = `${data.kpis.overallAccuracy}%`;
     document.getElementById('auditMatched').innerText = data.kpis.totalMatched.toLocaleString();
     document.getElementById('auditExtra').innerText = data.kpis.totalExtra.toLocaleString();
@@ -151,13 +151,15 @@ function updateAuditDashboard(data) {
     const missingPct = data.kpis.missingPercentage || 0;
 
 
+
     document.getElementById('auditMatchedCount').innerText = matchedQty.toLocaleString();
     document.getElementById('auditExtraCount').innerText = extraQty.toLocaleString();
     document.getElementById('auditMissingCount').innerText = missingQty.toLocaleString();
 
-    document.getElementById('auditMatchedPercentage').innerText = `${matchedPct.toFixed(1)}%`;
-    document.getElementById('auditExtraPercentage').innerText = `${extraPct.toFixed(1)}%`;
-    document.getElementById('auditMissingPercentage').innerText = `${missingPct.toFixed(1)}%`;
+    document.getElementById('auditMatchedPercentage').innerText = `${matchedPct.toFixed(0)}%`;
+    document.getElementById('auditExtraPercentage').innerText = `${extraPct.toFixed(0)}%`;
+    document.getElementById('auditMissingPercentage').innerText = `${missingPct.toFixed(0)}%`;
+
 
 
 
@@ -179,7 +181,7 @@ function updateAuditDashboard(data) {
         return `
         <tr class="hover:bg-slate-50 transition-colors">
             <td class="px-4 py-3 font-bold text-slate-800">${prod.name}</td>
-            <td class="px-4 py-3 text-center font-mono text-slate-600">${productId}</td>
+            <td class="px-4 py-3 text-center font-mono text-slate-600">${prod.itemId || productId}</td>
             <td class="px-4 py-3 text-center">
                 <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
                     ${prod.locations.length}
@@ -284,10 +286,10 @@ function setupAuditFilters() {
                 (String(d.staffName || '').toLowerCase()).includes(searchTerm) ||
                 (String(d.barcode || '').toLowerCase()).includes(searchTerm);
 
+            const statusTerm = (d.locationStatus || '').toLowerCase();
             const matchesStatus =
                 statusVal === 'all' ||
-                (statusVal === 'extra' && d.diff > 0) ||
-                (statusVal === 'missing' && d.diff < 0);
+                statusTerm.includes(statusVal);
 
             const matchesCategory = categoryVal === 'all' || d.category === categoryVal;
 
@@ -356,14 +358,14 @@ function renderDiscrepancyTable(discrepancies) {
             <td class="px-3 py-3 text-right text-slate-600">${d.finalVar}</td>
             <td class="px-3 py-3"><span class="text-[10px] px-2 py-1 bg-slate-50 border rounded-md text-slate-600">${d.locationStatus}</span></td>
             <td class="px-3 py-3 whitespace-normal min-w-[120px]">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${d.diff > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}">
-                    ${d.productStatus || (d.diff > 0 ? 'Extra' : 'Missing')}
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold ${d.diff > 0 ? 'bg-orange-100 text-orange-700' : d.diff < 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}">
+                    ${d.productStatus || (d.diff > 0 ? 'Extra' : d.diff < 0 ? 'Missing' : 'Match')}
                 </span>
             </td>
             <td class="px-3 py-3 font-medium text-slate-800">${d.staffName}</td>
             <td class="px-3 py-3 text-center text-slate-400">${d.employeeAccuracy}</td>
             <td class="px-3 py-3 text-slate-400 text-[10px]">${d.live}</td>
-            <td class="px-3 py-3 text-slate-400 text-[10px]">${d.dateNow}</td>
+
             <td class="px-3 py-3 text-slate-400 text-[10px]">${d.liveWait}</td>
         </tr>
     `).join('');
@@ -391,19 +393,23 @@ async function fetchData() {
         const data = await res.json();
         console.log('✅ Data received:', data.products?.length, 'products');
 
-        // Limit to 20 if no filters are applied
+        // allData should contain the FULL products list for lookups (History/Charts)
+        allData = data.uniqueProducts || data.products || [];
+
+        // Limit to 20 visually if no filters are applied
         const hasFilters = search || type || category || startDate || endDate;
+        const displayData = { ...data };
         if (!hasFilters) {
-            data.products = data.products.slice(0, 20);
+            if (displayData.products) displayData.products = displayData.products.slice(0, 20);
+            if (displayData.uniqueProducts) displayData.uniqueProducts = displayData.uniqueProducts.slice(0, 20);
         }
 
-        if (!data.products || data.products.length === 0) {
+        if ((!data.products || data.products.length === 0) && (!data.uniqueProducts || data.uniqueProducts.length === 0)) {
             // Empty state handled by table checks usually
             console.log('⚠️ No products data');
         }
 
-        allData = data.products;
-        updateDashboard(data);
+        updateDashboard(displayData);
 
         if (lastUpdateEl) lastUpdateEl.innerText = 'Updated: ' + new Date().toLocaleTimeString();
 
@@ -412,6 +418,23 @@ async function fetchData() {
         if (lastUpdateEl) lastUpdateEl.innerText = 'Error';
     }
 }
+
+function clearFilters() {
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    const categoryInput = document.getElementById('categoryInput');
+    const dateFrom = document.getElementById('dateFrom');
+    const dateTo = document.getElementById('dateTo');
+
+    if (searchInput) searchInput.value = '';
+    if (typeFilter) typeFilter.value = '';
+    if (categoryInput) categoryInput.value = '';
+    if (dateFrom) dateFrom.value = '';
+    if (dateTo) dateTo.value = '';
+
+    fetchData();
+}
+
 
 function updateDashboard(data) {
     console.log('📊 updateDashboard called with:', {
@@ -426,6 +449,12 @@ function updateDashboard(data) {
     const invMatchedEl = document.getElementById('invMatched');
     const invExtraEl = document.getElementById('invExtra');
     const invMissingEl = document.getElementById('invMissing');
+
+    // Total Products should show DISTINCT count per user request
+    const totalProductsEl = document.getElementById('totalProducts');
+    const totalPiecesEl = document.getElementById('totalPieces');
+    if (totalProductsEl) totalProductsEl.innerText = data.kpis.totalProducts.toLocaleString();
+    if (totalPiecesEl) totalPiecesEl.innerText = (data.kpis.totalLatestQuantity || 0).toLocaleString();
 
     if (invAccuracyEl) invAccuracyEl.innerText = `${data.kpis.accuracy}%`;
     if (invAccuracyBar) invAccuracyBar.style.width = `${data.kpis.accuracy}%`;
@@ -451,7 +480,7 @@ function updateDashboard(data) {
 
     console.log('✅ KPIs updated');
 
-    // Render Table
+    // Render Table (Unique Products only)
     const tbody = document.getElementById('inventoryTable');
     if (!tbody) {
         console.error('❌ inventoryTable element not found!');
@@ -460,14 +489,16 @@ function updateDashboard(data) {
 
     tbody.innerHTML = '';
 
-    if (data.products.length === 0) {
+    const productsToRender = data.uniqueProducts || data.products;
+
+    if (productsToRender.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">No products found matching filters.</td></tr>';
         console.log('⚠️ No products to display');
         return;
     }
 
-    console.log('🔨 Rendering', data.products.length, 'products...');
-    data.products.forEach(p => {
+    console.log('🔨 Rendering', productsToRender.length, 'unique products...');
+    productsToRender.forEach(p => {
         const diffClass = p.lastDiff > 0 ? 'text-green-600 bg-green-50' : p.lastDiff < 0 ? 'text-red-600 bg-red-50' : 'text-slate-400 bg-slate-50';
         const diffSign = p.lastDiff > 0 ? '+' : '';
 
@@ -484,11 +515,6 @@ function updateDashboard(data) {
             </td>
             <td class="px-6 py-4 text-sm text-slate-600">${p.Category}</td>
             <td class="px-6 py-4 font-bold text-slate-800">${p.currentQuantity}</td>
-            <td class="px-6 py-4 text-sm">
-                <span class="px-2 py-1 rounded-full font-medium ${diffClass}">
-                    ${diffSign}${p.lastDiff}
-                </span>
-            </td>
             <td class="px-6 py-4">
                 <button onclick="event.stopPropagation(); openHistory('${p.ProductCode}')" 
                         class="text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-1 rounded-lg font-medium text-sm transition-colors">
@@ -520,17 +546,27 @@ function updateCategoryChart(products) {
     const filteredProducts = products;
 
     // 2. Aggregate data for the chart (Status Counts over Time)
+    // Use each row's OWN date and status — NOT the full history array,
+    // which contains dates from other audit periods and causes phantom dates.
     const trends = {}; // { date: { matched: 0, extra: 0, missing: 0 } }
 
-    filteredProducts.forEach(p => {
-        p.history.forEach(h => {
-            const date = h.formattedDate;
-            if (!trends[date]) trends[date] = { matched: 0, extra: 0, missing: 0 };
+    const isExtra = (s) => {
+        const st = (s || '').toLowerCase().trim();
+        return st.includes('extra') || st.includes('increased') || st.includes('زيادة') || st.includes('فائض') || st === '+';
+    };
+    const isMissing = (s) => {
+        const st = (s || '').toLowerCase().trim();
+        return st.includes('missing') || st.includes('decreased') || st.includes('ناقص') || st.includes('عجز') || st === '-';
+    };
 
-            if (h.diff > 0) trends[date].extra++;
-            else if (h.diff < 0) trends[date].missing++;
-            else trends[date].matched++;
-        });
+    filteredProducts.forEach(p => {
+        const date = p.lastCountDate; // The row's own audit date
+        if (!date) return;
+        if (!trends[date]) trends[date] = { matched: 0, extra: 0, missing: 0 };
+
+        if (isExtra(p.ProductStatus)) trends[date].extra++;
+        else if (isMissing(p.ProductStatus)) trends[date].missing++;
+        else trends[date].matched++;
     });
 
     const sortedDates = Object.keys(trends).sort();
@@ -654,17 +690,19 @@ function openHistory(code) {
     tbody.innerHTML = '';
 
     // Show latest first
-    const history = [...product.history].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const history = [...product.history].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     history.forEach(h => {
-        const diffColor = h.diff > 0 ? 'text-green-600' : h.diff < 0 ? 'text-red-600' : 'text-slate-400';
-        const diffSign = h.diff > 0 ? '+' : '';
+        const discrepancy = h.quantity - h.sysQty;
+        const diffColor = discrepancy >= 0 ? 'text-green-600' : 'text-red-600';
+        const diffSign = discrepancy > 0 ? '+' : '';
 
         tbody.innerHTML += `
             <tr class="hover:bg-slate-50">
                 <td class="py-3 font-mono text-slate-500">${h.formattedDate}</td>
-                <td class="py-3 font-bold text-slate-800">${h.quantity}</td>
-                <td class="py-3 font-medium ${diffColor}">${diffSign}${h.diff}</td>
+                <td class="py-3 font-bold text-slate-800 text-center">${h.quantity}</td>
+                <td class="py-3 font-bold text-slate-600 text-center">${h.sysQty || 0}</td>
+                <td class="py-3 font-bold text-center ${diffColor}">${diffSign}${discrepancy}</td>
             </tr>
         `;
     });
@@ -770,7 +808,7 @@ function renderStaffTable(staffData) {
                 <td class="px-6 py-4 font-bold text-slate-800">${name}</td>
                 <td class="px-6 py-4 text-center font-medium">${s.total}</td>
                 <td class="px-6 py-4 text-center text-green-600 font-bold">${s.match}</td>
-                <td class="px-6 py-4 text-center text-red-600 font-bold">${s.missing}</td>
+                <td class="px-6 py-4 text-center text-red-600 font-bold">${s.total - s.match}</td>
                 <td class="px-6 py-4">
                     <div class="flex items-center">
                         <span class="font-bold mr-2 ${s.accuracy > 95 ? 'text-green-600' : s.accuracy > 85 ? 'text-blue-600' : 'text-orange-600'}">
@@ -791,7 +829,7 @@ function renderStaffTable(staffData) {
                 <td class="px-6 py-4 italic text-slate-500">System / Unassigned</td>
                 <td class="px-6 py-4 text-center font-medium">${sys.total}</td>
                 <td class="px-6 py-4 text-center text-green-600 font-bold">${sys.match}</td>
-                <td class="px-6 py-4 text-center text-red-600 font-bold">${sys.missing}</td>
+                <td class="px-6 py-4 text-center text-red-600 font-bold">${sys.total - sys.match}</td>
                 <td class="px-6 py-4 text-slate-400">N/A</td>
             </tr>
         `;
@@ -823,7 +861,7 @@ function renderStaffChart(staffData) {
     const labels = sortedData.map(([name]) => name);
     const totalItems = sortedData.map(([_, s]) => s.total);
     const matchedItems = sortedData.map(([_, s]) => s.match);
-    const missingItems = sortedData.map(([_, s]) => s.missing);
+    const errorItems = sortedData.map(([_, s]) => s.total - s.match);
     const accuracyData = sortedData.map(([_, s]) => s.accuracy);
 
     staffProductivityChart = new Chart(ctx, {
@@ -846,8 +884,8 @@ function renderStaffChart(staffData) {
                     borderWidth: 2
                 },
                 {
-                    label: 'Missing',
-                    data: missingItems,
+                    label: 'Human Error',
+                    data: errorItems,
                     backgroundColor: 'rgba(239, 68, 68, 0.7)',
                     borderColor: 'rgba(239, 68, 68, 1)',
                     borderWidth: 2
@@ -945,13 +983,14 @@ function filterStaffByDate() {
         }
         filteredStaffData[staffName].total++;
 
-        if (d.diff === 0) {
+        // Use employeeAccuracy column (same logic as smartAnalysis.js)
+        const empAccuracyRaw = String(d.employeeAccuracy || '').toLowerCase().trim();
+        const isMatch = empAccuracyRaw.includes('match') || empAccuracyRaw.includes('مطابق') || empAccuracyRaw.includes('100') || empAccuracyRaw === 'ok';
+        
+        if (isMatch) {
             filteredStaffData[staffName].match++;
-        } else if (d.diff > 0) {
-            filteredStaffData[staffName].extra++;
-        } else if (d.diff < 0) {
-            filteredStaffData[staffName].missing++;
         }
+        // Note: extra/missing are not used for staff analysis display (Human Error = total - match)
     });
 
     // Calculate accuracy
@@ -977,6 +1016,7 @@ window.clearStaffDateFilter = clearStaffDateFilter;
 console.log('📦 Exposing functions to window object...');
 window.switchTab = switchTab;
 window.fetchData = fetchData;
+window.clearFilters = clearFilters;
 window.fetchSmartAnalysis = fetchSmartAnalysis;
 window.showTrend = showTrend;
 window.openHistory = openHistory;

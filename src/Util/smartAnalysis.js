@@ -17,7 +17,7 @@ export function analyzeInventory(data) {
             totalExtra: 0,
             totalMissing: 0,
             totalRows: 0,
-            // Total pieces from physicalQty
+            totalDistinctProducts: 0, // Added for dual-level logic
             physicalQtyMatched: 0,
             physicalQtyExtra: 0,
             physicalQtyMissing: 0,
@@ -55,15 +55,26 @@ export function analyzeInventory(data) {
     mid30Days.setDate(now.getDate() + 30);
 
     data.forEach(row => {
+        // Normalize keys once
+        const rowKeys = Object.keys(row).map(k => ({
+            original: k,
+            normalized: k.toLowerCase().replace(/\s/g, '')
+        }));
+
         const findVal = (possibleKeys) => {
-            const key = Object.keys(row).find(k => possibleKeys.includes(k.toLowerCase().replace(/\s/g, '')));
-            return key ? row[key] : null;
+            for (const pKey of possibleKeys) {
+                const match = rowKeys.find(rk => rk.normalized === pKey);
+                if (match) return row[match.original];
+            }
+            return null;
         };
 
         // Map to actual Sheet2 column names
         const location = findVal(['productlocation', 'location', 'warehouse', 'store', 'loc', 'aisle', 'bin', 'branch', 'site', 'wh']) || row._sheetName || 'Unknown';
         const productName = findVal(['productname', 'name', 'item', 'product', 'description', 'desc']);
-        const productId = findVal(['itemid', 'productid', 'sku', 'barcode', 'productcode', 'code', 'id', 'breadfastid', 'ean']);
+        let productId = findVal(['itemid', 'productid', 'sku', 'barcode', 'productcode', 'code', 'id', 'breadfastid', 'ean']);
+        if (productId) productId = String(productId).trim().toLowerCase();
+
         const category = findVal(['category', 'group', 'class', 'family', 'dept', 'department']) || 'General';
         let staffName = findVal(['username']) || findVal(['user', 'agent', 'staff', 'worker', 'doneby', 'checkedby', 'counter', 'auditor', 'employee', 'namecountedby', 'ceraited', 'ceraitedby']) || 'System';
         staffName = staffName.trim();
@@ -74,7 +85,8 @@ export function analyzeInventory(data) {
         }
 
         // Capitalize first letters
-        staffName = staffName.split(' ').map(word =>
+        // Capitalize first letters and handle multiple spaces
+        staffName = staffName.split(/\s+/).filter(Boolean).map(word =>
             word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
         ).join(' ');
 
@@ -89,16 +101,17 @@ export function analyzeInventory(data) {
         const expiryDateStr = findVal(['expirationdate', 'expirydate', 'expiry', 'exp', 'expiration', 'expirydate/time']);
         const inventoryDateStr = findVal(['inventorydate', 'datenow', 'date', 'invdate', 'countdate', 'datecounted', 'timestamp', 'productiondate']);
 
-        // Skip rows that don't look like audit records
-        if (!productId || (!status && isNaN(systemQty) && isNaN(physicalQty))) return;
+        // Skip rows that don't look like audit records or have junk IDs
+        const junkValues = ['0', '(blank)', 'null', 'undefined', '-', 'nan', 'n/a', ''];
+        if (!productId || junkValues.includes(productId) || (!status && isNaN(systemQty) && isNaN(physicalQty))) return;
 
         // 1. Normalize Status for KPIs
         const productStatusRaw = String(findVal(['productstatus', 'status', 'matchstatus', 'discrepancy']) || '').toLowerCase();
-        const empAccuracyRaw = String(findVal(['employeeaccuracy', 'staffaccuracy', 'workeraccuracy']) || '').toLowerCase();
+        const empAccuracyRaw = String(findVal(['employeeaccuracy', 'staffaccuracy', 'workeraccuracy']) || '').toLowerCase().trim();
 
         let normalizedStatus = 'unknown';
 
-        // KPI Status Logic
+        // KPI Status Logic (Global KPIs still use these)
         if (productStatusRaw.includes('match') || productStatusRaw.includes('مطابق') || productStatusRaw === 'ok') {
             normalizedStatus = 'match';
         } else if (productStatusRaw.includes('extra') || productStatusRaw.includes('زيادة') || productStatusRaw === '+') {
@@ -112,14 +125,16 @@ export function analyzeInventory(data) {
             else if (physicalQty < systemQty) normalizedStatus = 'missing';
         }
 
-        // Staff Analysis Status
-        let staffStatus = normalizedStatus;
-        if (empAccuracyRaw.includes('match') || empAccuracyRaw.includes('مطابق') || empAccuracyRaw.includes('100')) {
-            staffStatus = 'match';
-        } else if (empAccuracyRaw.includes('miss') || empAccuracyRaw.includes('ناقص') || empAccuracyRaw.includes('عجز')) {
-            staffStatus = 'missing';
-        } else if (empAccuracyRaw.includes('extra') || empAccuracyRaw.includes('زيادة') || empAccuracyRaw.includes('فائض')) {
-            staffStatus = 'extra';
+        // Staff Analysis Status (Strictly based on Employee Accuracy column)
+        let staffStatus = 'match'; // Default to match
+        if (empAccuracyRaw !== '') {
+            const isExplicitMatch = empAccuracyRaw.includes('match') || empAccuracyRaw.includes('مطابق') || empAccuracyRaw.includes('100') || empAccuracyRaw === 'ok';
+            if (isExplicitMatch) {
+                staffStatus = 'match';
+            } else {
+                // Anything written in the column that is NOT a match is a Human Error
+                staffStatus = 'error';
+            }
         }
 
         // 2. Location Analysis
@@ -147,17 +162,21 @@ export function analyzeInventory(data) {
         else if (normalizedStatus === 'extra') loc.extra++;
         else if (normalizedStatus === 'missing') loc.missing++;
 
-        // 3. Product Analysis
-        if (!analysis.productReport[productId]) {
-            analysis.productReport[productId] = {
+        // 3. Product Analysis - Use composite key to treat different names with same ID as separate items
+        const productNameNormalized = (productName || '').trim().toLowerCase();
+        const productKey = `${productId}|${productNameNormalized}`;
+
+        if (!analysis.productReport[productKey]) {
+            analysis.productReport[productKey] = {
                 name: productName || productId,
+                itemId: productId || 'N/A',
                 totalAudits: 0,
                 locations: [],
                 issues: { match: 0, extra: 0, missing: 0 },
                 issueFrequency: 0
             };
         }
-        const prod = analysis.productReport[productId];
+        const prod = analysis.productReport[productKey];
         prod.totalAudits++;
         prod.issues[normalizedStatus]++;
         prod.issueFrequency = ((prod.issues.extra + prod.issues.missing) / prod.totalAudits) * 100;
@@ -224,8 +243,8 @@ export function analyzeInventory(data) {
         else if (staffStatus === 'extra') analysis.staffReport[staffName].extra++;
         else if (staffStatus === 'missing') analysis.staffReport[staffName].missing++;
 
-        // 7. Discrepancy Drill-down
-        if (normalizedStatus !== 'match') {
+        // 7. Discrepancy Drill-down (Now includes all rows per user request)
+        if (true) {
 
             const barcode = findVal(['barcode', 'ean', 'upc']);
             const itemId = findVal(['itemid', 'productid', 'sku', 'id']);
@@ -286,9 +305,17 @@ export function analyzeInventory(data) {
 
     // Calculate KPI Percentages (Based on record counts/rows for consistency)
     if (analysis.kpis.totalRows > 0) {
-        analysis.kpis.matchedPercentage = (analysis.kpis.totalMatched * 100) / analysis.kpis.totalRows;
-        analysis.kpis.extraPercentage = (analysis.kpis.totalExtra * 100) / analysis.kpis.totalRows;
-        analysis.kpis.missingPercentage = (analysis.kpis.totalMissing * 100) / analysis.kpis.totalRows;
+        analysis.kpis.matchedPercentage = Math.round((analysis.kpis.totalMatched * 100) / analysis.kpis.totalRows);
+        analysis.kpis.extraPercentage = Math.round((analysis.kpis.totalExtra * 100) / analysis.kpis.totalRows);
+        analysis.kpis.missingPercentage = Math.round((analysis.kpis.totalMissing * 100) / analysis.kpis.totalRows);
+
+        // Count distinct products across all processed audit records
+        const distinctIDs = new Set();
+        Object.keys(analysis.productReport).forEach(key => {
+            const [id] = key.split('|');
+            distinctIDs.add(id);
+        });
+        analysis.kpis.totalDistinctProducts = distinctIDs.size;
     }
 
     // Finalize Location Metrics
@@ -333,7 +360,7 @@ export function analyzeInventory(data) {
     analysis.discrepanciesArr = analysis.discrepancies.slice(0, 500);
 
     // Finalize Global KPIs
-    analysis.kpis.overallAccuracy = (analysis.kpis.totalMatched / analysis.kpis.totalRows) * 100;
+    analysis.kpis.overallAccuracy = Math.round((analysis.kpis.totalMatched / analysis.kpis.totalRows) * 100);
 
     // Generate Alerts
     if (analysis.expiryAnalysis.expired.length > 0) {

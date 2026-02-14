@@ -25,7 +25,7 @@
                         Location View
                     </button>
                     <button onclick="switchTab('audit')" id="tab-audit" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
-                        Audit View
+                        Productivity View
                     </button>
                 </div>
             </div>
@@ -40,11 +40,8 @@
             <!-- KPI Cards -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Stability Score</p>
-                    <h3 id="invAccuracy" class="text-4xl font-extrabold text-slate-900 mt-1">0%</h3>
-                    <div class="w-full bg-slate-100 h-2 rounded-full mt-3">
-                        <div id="invAccuracyBar" class="bg-blue-600 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
+                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Total Items (Unique)</p>
+                    <h3 id="totalProducts" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (Count)</p>
@@ -60,9 +57,14 @@
                 </div>
             </div>
 
-            <!-- Inventory Counts (Sum) -->
+            
+    
+
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-[-1rem]">
-                <div class="invisible md:block"></div> <!-- Spacer to align with counts -->
+                <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Total Pieces (Latest)</p>
+                    <h3 id="totalPieces" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (Sum => per Unit)</p>
                     <h3 id="invMatchedSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
@@ -77,9 +79,14 @@
                 </div>
             </div>
 
-            <!-- Inventory Counts (%) -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-[-1rem]">
-                <div class="invisible md:block"></div> <!-- Spacer to align with counts -->
+                <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
+                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Stability Score</p>
+                    <h3 id="invAccuracy" class="text-2xl font-bold text-slate-900 mt-1">0%</h3>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3">
+                        <div id="invAccuracyBar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (%Percentage)</p>
                     <h3 id="invMatchedPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
@@ -164,9 +171,12 @@
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Date To</label>
                         <input type="date" id="dateTo" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
                     </div>
-                    <div class="flex items-end">
+                    <div class="flex items-end gap-2">
                         <button onclick="fetchData()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
                             Apply Filters
+                        </button>
+                        <button onclick="clearFilters()" class="w-full bg-slate-300 hover:bg-slate-400 text-slate-800 font-semibold py-2 px-4 rounded-lg transition-colors">
+                            Clear
                         </button>
                     </div>
                 </div>
@@ -184,7 +194,6 @@
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Product</th>
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Category</th>
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Current Qty</th>
-                                    <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Daily Shift</th>
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Action</th>
                                 </tr>
                             </thead>
@@ -319,7 +328,7 @@
                             <thead class="bg-slate-50 sticky top-0 border-b-2 border-slate-200">
                                 <tr class="text-slate-600 font-semibold">
                                     <th class="px-4 py-3 text-left">Product Name</th>
-                                    <th class="px-4 py-3 text-center">Barcode</th>
+                                    <th class="px-4 py-3 text-center">Item ID</th>
                                     <th class="px-4 py-3 text-center">Locations Count</th>
                                     <th class="px-4 py-3 text-center">View Locations</th>
                                 </tr>
@@ -350,7 +359,7 @@
                 <!-- Expiry Alerts -->
                 <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-800">Critical Expiry Alerts</h3>
+                        <h3 class="font-bold text-slate-800">🚨 Critical Expiry Alerts</h3>
                         <span class="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded" id="expiryCount">0 Items</span>
                     </div>
                     <div class="max-h-96 overflow-y-auto">
@@ -372,7 +381,7 @@
                 <!-- Problematic Products -->
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 border-b border-slate-100 bg-slate-50">
-                        <h3 class="font-bold text-slate-800">Repeat Discrepancy Items</h3>
+                        <h3 class="font-bold text-slate-800">⚠️ Repeat Discrepancy Items</h3>
                     </div>
                     <div id="problematicList" class="p-4 space-y-4">
                         <!-- Problem products -->
@@ -411,7 +420,8 @@
                         <select id="auditStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
                             <option value="all">All Statuses</option>
                             <option value="extra">Extra Only</option>
-                            <option value="missing">Missing Only</option>
+                            <option value="loss">Loss Only</option>
+                            <option value="match">Match Only</option>
                         </select>
 
                         <button id="applyAuditFilters" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-md">
@@ -441,7 +451,7 @@
                                 <th class="px-3 py-3">User Name</th>
                                 <th class="px-3 py-3 text-center">Emp. Acc.</th>
                                 <th class="px-3 py-3 text-center">Live</th>
-                                <th class="px-3 py-3">Date Now</th>
+
                                 <th class="px-3 py-3">Live Wait</th>
                             </tr>
                         </thead>
@@ -537,8 +547,9 @@
                     <thead>
                         <tr class="text-xs text-slate-500 uppercase font-semibold border-b border-slate-100">
                             <th class="pb-3">Date</th>
-                            <th class="pb-3">Quantity</th>
-                            <th class="pb-3">Change</th>
+                            <th class="pb-3 text-center">Physical QTY</th>
+                            <th class="pb-3 text-center">Stock QTY</th>
+                            <th class="pb-3 text-center">Discrepancy</th>
                         </tr>
                     </thead>
                     <tbody id="modalTableBody" class="text-sm text-slate-700 divide-y divide-slate-50">

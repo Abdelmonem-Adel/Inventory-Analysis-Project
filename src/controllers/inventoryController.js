@@ -1,5 +1,5 @@
 import { readSheet, listSheetTitles } from "../../services/sheet.service.js";
-import { processInventoryData, calculateKPIs } from "../Util/analytics.js";
+import { processInventoryData, calculateKPIs, getUniqueLatestProducts } from "../Util/analytics.js";
 import { applyFilters } from "../Util/filters.js";
 import { analyzeInventory } from "../Util/smartAnalysis.js";
 
@@ -42,9 +42,13 @@ export const getInventoryDashboard = async (req, res, next) => {
         // 5. Recalculate KPIs based on Filtered Data
         const dynamicKPIs = calculateKPIs(filteredProducts);
 
-        // 6. Return Response
+        // 6. Generate Unique Latest Products for Dashboard Table
+        const uniqueProducts = getUniqueLatestProducts(filteredProducts);
+
+        // 7. Return Response
         res.json({
             products: filteredProducts,
+            uniqueProducts: uniqueProducts,
             kpis: dynamicKPIs,
             meta: {
                 timestamp: new Date().toISOString()

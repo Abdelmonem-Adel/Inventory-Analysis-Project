@@ -6,52 +6,64 @@ export function processInventoryData(data, startDate = null, endDate = null) {
 
     if (!data || data.length === 0) return null;
 
-    // Group by ProductCode
-    const products = {};
+    // Helper: format date as YYYY-MM-DD in LOCAL time (not UTC)
+    // Prevents off-by-one errors caused by toISOString() converting to UTC
+    const formatLocalDate = (d) => {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
+    // 1. Build historical context per ProductID
+    const historyMap = {};
+    const results = [];
+
     let skippedNoCode = 0;
     let skippedDate = 0;
 
     data.forEach(row => {
-        // Normalize keys and find matching properties
+        // Normalize keys once
+        const rowKeys = Object.keys(row).map(k => ({
+            original: k,
+            normalized: k.toLowerCase().replace(/\s/g, '')
+        }));
+
         const findVal = (possibleKeys) => {
-            const key = Object.keys(row).find(k => possibleKeys.includes(k.toLowerCase().replace(/\s/g, '')));
-            return key ? row[key] : null;
+            for (const key of possibleKeys) {
+                const normalizedKey = key.toLowerCase().replace(/\s/g, '');
+                const match = rowKeys.find(rk => rk.normalized === normalizedKey);
+                if (match) return row[match.original];
+            }
+            return null;
         };
 
-        let ProductCode = findVal(['sku', 'productcode', 'code', 'id', 'breadfastid']);
+        let ProductCode = findVal(['breadfastid', 'sku', 'productcode', 'code', 'id']);
         let BreadfastID = findVal(['breadfastid', 'bfid', 'itemid']);
         let ProductName = findVal(['productname', 'name', 'item']);
         const CountDate = findVal(['date', 'countdate']);
         const Quantity = findVal(['physicalqty', 'num', 'quantity', 'qty', 'count', 'stockqty']);
-        const ProductStatus = findVal(['productstatus', 'proudactstatus', 'status', 'loc.status']);
+        const SystemQuantity = findVal(['sysqty', 'systemqty', 'stockqty', 'logicalqty', 'bookqty', 'logicqty', 'expected', 'expectedqty', 'system']);
+        const ProductStatus = findVal(['Proudact Status', 'proudactstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus', 'proudactstatus', 'loc.status']);
         const rawCat = findVal(['product/productcategory', 'category', 'type', 'cat']);
         const Category = (rawCat ? String(rawCat) : 'Other').trim();
         const Warehouse = findVal(['warehouse', 'location', 'store']) || 'Main';
 
-        // Ensure String Types for IDs/Names to prevent .toLowerCase() crashes
-        if (ProductCode) ProductCode = String(ProductCode).trim();
-        if (BreadfastID) BreadfastID = String(BreadfastID).trim();
+        if (ProductCode) ProductCode = String(ProductCode).trim().toLowerCase();
+        if (BreadfastID) BreadfastID = String(BreadfastID).trim().toLowerCase();
         if (ProductName) ProductName = String(ProductName).trim();
-
 
         if (!ProductCode) ProductCode = BreadfastID;
 
-        if (!ProductCode || !CountDate) {
+        // Junk Filter: Skip rows with invalid or placeholder IDs
+        const junkValues = ['0', '(blank)', 'null', 'undefined', '-', 'nan', 'n/a', ''];
+        if (!ProductCode || junkValues.includes(ProductCode)) {
             skippedNoCode++;
             return;
         }
 
-        if (!products[ProductCode]) {
-            products[ProductCode] = {
-                ProductCode,
-                BreadfastID: BreadfastID || '',
-                ProductName: ProductName || ProductCode,
-                Category,
-                Warehouse,
-                ProductStatus: ProductStatus || 'Matched',
-                history: []
-            };
-        }
+        const ProductNameKey = ProductName ? ProductName.trim().toLowerCase() : '';
+        const productKey = `${ProductCode}|${ProductNameKey}`;
 
         let parsedDate = new Date(CountDate);
 
@@ -84,90 +96,95 @@ export function processInventoryData(data, startDate = null, endDate = null) {
             return;
         }
 
-        products[ProductCode].history.push({
+        const qty = parseInt(Quantity) || 0;
+        const sysQty = parseInt(SystemQuantity) || 0;
+        const status = ProductStatus || 'Matched';
+
+        const rowData = {
+            ProductCode,
+            BreadfastID: BreadfastID || '',
+            ProductName: ProductName || ProductCode,
+            Category,
+            Warehouse,
+            PhysicalQty: qty,
+            SystemQty: sysQty,
+            ProductStatus: status,
+            Date: parsedDate,
+            productKey: ProductCode,
+            currentQuantity: qty,
+            lastCountDate: formatLocalDate(parsedDate),
+        };
+
+        results.push(rowData);
+
+        // Add to history map for trend analysis
+        if (!historyMap[ProductCode]) historyMap[ProductCode] = [];
+        historyMap[ProductCode].push({
             date: parsedDate,
-            quantity: parseInt(Quantity) || 0
+            quantity: qty,
+            sysQty: sysQty,
+            status: status
         });
     });
 
     console.log(`[Analytics] Data Import Summary:`);
     console.log(`   - Total Rows Input: ${data.length}`);
-    console.log(`   - Skipped (No Code): ${skippedNoCode}`);
-    console.log(`   - Skipped (No Date): ${skippedDate}`);
-    console.log(`   - Unique Products: ${Object.keys(products).length}`);
+    console.log(`   - Valid Records: ${results.length}`);
 
-    const processedProducts = Object.values(products).map(product => {
-        // Sort history by date ASC
-        product.history.sort((a, b) => a.date - b.date);
-
-        // ALWAYS Calculate Standard Daily Shifts (Last - Prev)
-        product.history = product.history.map((record, index) => {
-            const prev = product.history[index - 1];
+    // 2. Process History and attach to results
+    Object.keys(historyMap).forEach(key => {
+        historyMap[key].sort((a, b) => a.date - b.date);
+        historyMap[key] = historyMap[key].map((record, index, arr) => {
+            const prev = arr[index - 1];
             const diff = prev ? record.quantity - prev.quantity : 0;
             return {
                 ...record,
                 diff,
-                formattedDate: record.date.toISOString().split('T')[0]
+                formattedDate: formatLocalDate(record.date)
             };
         });
+    });
 
-        // Determine which history subset to use for Reporting (Badge & Current Qty)
-        let reportHistory = product.history;
-        let lastDiff = 0;
-
-        // Apply Date Filtering for the *Reported Metrics* IF date range provided
-        if (startDate || endDate) {
-            // Parse filters as Local Time
-            const start = startDate ? new Date(startDate + 'T00:00:00') : new Date(0);
-            const end = endDate ? new Date(endDate + 'T23:59:59') : new Date(8640000000000000);
-
-            reportHistory = product.history.filter(h => h.date >= start && h.date <= end);
-
-            if (reportHistory.length > 0) {
-                if (reportHistory.length === 1) {
-                    // Single day selected: Use the daily shift calculated from previous record in full history
-                    lastDiff = reportHistory[0].diff;
-                } else {
-                    // Range selected: Net change (Last in range - First in range)
-                    const firstRec = reportHistory[0];
-                    const lastRec = reportHistory[reportHistory.length - 1];
-                    lastDiff = lastRec.quantity - firstRec.quantity;
-                }
-            }
-        } else {
-            // Default Mode (No dates): Standard Daily Shift
-            if (product.history.length > 0) {
-                const latest = product.history[product.history.length - 1];
-                lastDiff = latest.diff;
-            }
-        }
-
-        const lastRec = reportHistory.length > 0 ? reportHistory[reportHistory.length - 1] : null;
+    // 3. Enrich rows with their specific history entry's diff
+    const finalResults = results.map(row => {
+        const fullHistory = historyMap[row.productKey] || [];
+        // Match by date and quantity to find the specific audit event in history
+        const histEntry = fullHistory.find(h => h.date.getTime() === row.Date.getTime() && h.quantity === row.PhysicalQty) || {};
 
         return {
-            ...product,
-            history: reportHistory, // Return filtered history
-            currentQuantity: lastRec ? lastRec.quantity : 0,
-            lastCountDate: lastRec ? lastRec.date.toISOString().split('T')[0] : null,
-            lastDiff: lastDiff,
-            latestTrend: reportHistory.slice(-7).map(h => ({
-                ...h,
-                formattedDate: h.date.toISOString().split('T')[0]
-            }))
+            ...row,
+            lastDiff: histEntry.diff || 0,
+            history: fullHistory,
+            latestTrend: fullHistory.slice(-7)
         };
     });
 
-    // Filter out products that have no records in the selected period
-    const productsInPeriod = processedProducts.filter(p => p.history && p.history.length > 0);
+    // Apply Date Filtering
+    let filteredResults = finalResults;
+    if (startDate || endDate) {
+        const start = startDate ? new Date(startDate + 'T00:00:00') : new Date(0);
+        const end = endDate ? new Date(endDate + 'T23:59:59') : new Date(8640000000000000);
+        filteredResults = finalResults.filter(r => r.Date >= start && r.Date <= end);
+    }
 
-    // KPIs should only count products present in the selected period
-    const kpis = calculateKPIs(productsInPeriod);
-
-    console.log(`[Analytics] Processed ${Object.keys(products).length} products.`);
+    console.log(`[Analytics] Processed ${filteredResults.length} rows.`);
     return {
-        products: productsInPeriod,
-        kpis
+        products: filteredResults,
+        kpis: calculateKPIs(filteredResults)
     };
+}
+
+export function getUniqueLatestProducts(products) {
+    if (!products || products.length === 0) return [];
+    // Sort DESC by Date to ensure newest record for each product code is FIRST
+    const sorted = [...products].sort((a, b) => (b.Date?.getTime() || 0) - (a.Date?.getTime() || 0));
+    const uniqueMap = new Map();
+    sorted.forEach(r => {
+        if (!uniqueMap.has(r.ProductCode)) {
+            uniqueMap.set(r.ProductCode, r);
+        }
+    });
+    return Array.from(uniqueMap.values());
 }
 
 export function calculateKPIs(products) {
@@ -186,17 +203,20 @@ export function calculateKPIs(products) {
     products.forEach(p => {
         totalQuantity += p.currentQuantity;
 
-        const status = (p.ProductStatus || '').toLowerCase();
+        const status = (p.ProductStatus || '').toLowerCase().trim();
 
-        if (status.includes('extra') || status.includes('increased')) {
+        const isExtra = status.includes('extra') || status.includes('increased') || status.includes('زيادة') || status.includes('فائض') || status.includes('بزيادة') || status === '+';
+        const isMissing = status.includes('missing') || status.includes('decreased') || status.includes('ناقص') || status.includes('عجز') || status.includes('بعجز') || status === '-';
+
+        if (isExtra) {
             increasedCount++;
-            sumIncreased += p.currentQuantity;
-        } else if (status.includes('missing') || status.includes('decreased')) {
+            sumIncreased += p.currentQuantity || 0;
+        } else if (isMissing) {
             decreasedCount++;
-            sumDecreased += p.currentQuantity;
+            sumDecreased += p.currentQuantity || 0;
         } else {
-            stableCount++; // Matched/Stable
-            sumStable += p.currentQuantity;
+            stableCount++; // Any other status is Matched (e.g., 'Matched', 'Match', 'Ok', 'مطابق', or even empty)
+            sumStable += p.currentQuantity || 0;
         }
 
         if (p.lastDiff > biggestIncrease.val) {
@@ -207,19 +227,35 @@ export function calculateKPIs(products) {
         }
     });
 
-    const total = products.length;
-    const accuracy = total > 0 ? ((stableCount / total) * 100).toFixed(1) : 0;
+    const distinctProducts = new Set(products.map(p => p.ProductCode));
+    const totalRowsCount = products.length;
+    const totalDistinct = distinctProducts.size;
 
-    const percentStable = total > 0 ? ((stableCount / total) * 100).toFixed(1) : 0;
-    const percentIncreased = total > 0 ? ((increasedCount / total) * 100).toFixed(1) : 0;
-    const percentDecreased = total > 0 ? ((decreasedCount / total) * 100).toFixed(1) : 0;
+    // Accuracy and percentages should be based on total records/audits performed
+    const accuracy = totalRowsCount > 0 ? Math.round((stableCount / totalRowsCount) * 100) : 0;
+
+    const percentStable = totalRowsCount > 0 ? Math.round((stableCount / totalRowsCount) * 100) : 0;
+    const percentIncreased = totalRowsCount > 0 ? Math.round((increasedCount / totalRowsCount) * 100) : 0;
+    const percentDecreased = totalRowsCount > 0 ? Math.round((decreasedCount / totalRowsCount) * 100) : 0;
+
+    const latestMap = new Map();
+    products.forEach(p => {
+        const existing = latestMap.get(p.ProductCode);
+        if (!existing || p.Date > existing.date) {
+            latestMap.set(p.ProductCode, { date: p.Date, qty: p.currentQuantity });
+        }
+    });
+    let sumLatestTotal = 0;
+    latestMap.forEach(v => sumLatestTotal += v.qty);
 
     return {
-        totalProducts: total,
+        totalProducts: totalDistinct, // DISTINCT count as requested
+        totalLatestQuantity: sumLatestTotal, // Sum of LATEST pieces per item
+        totalRecords: totalRowsCount,  // RAW row count
         totalCurrentQuantity: totalQuantity,
-        productsIncreased: increasedCount, // Extra
-        productsDecreased: decreasedCount, // Missing
-        productsStable: stableCount,       // Matched
+        productsIncreased: increasedCount,
+        productsDecreased: decreasedCount,
+        productsStable: stableCount,
         sumIncreased,
         sumDecreased,
         sumStable,
