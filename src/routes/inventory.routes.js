@@ -1,23 +1,24 @@
 import express from 'express';
-import { getInventoryDashboard, getInventoryAnalysis } from '../controllers/inventoryController.js';
+import { getInventoryDashboard, getInventoryAnalysis, getProductivityAnalysis } from '../controllers/inventoryController.js';
 import { listSheetTitles, readSheet } from '../../services/sheet.service.js';
 
 const router = express.Router();
 
 router.get('/dashboard', getInventoryDashboard);
 router.get('/analysis', getInventoryAnalysis);
+router.get('/productivity', getProductivityAnalysis);
 
-// Verification endpoint to check sheet2 connection
-router.get('/verify-sheet2', async (req, res) => {
+// Verification endpoint to check locations acu connection
+router.get('/verify-locations-acu', async (req, res) => {
     try {
         const titles = await listSheetTitles();
-        const pattern = /sheet\s*2/i;
+        const pattern = /locations\s*acu/i;
         const match = titles.find(t => pattern.test(t));
 
         if (!match) {
             return res.json({
                 success: false,
-                message: 'Sheet2 not found',
+                message: 'locations acu not found',
                 availableSheets: titles
             });
         }

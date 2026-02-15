@@ -92,8 +92,10 @@ function switchTab(tab) {
 
     if (tab === 'inventory') {
         fetchData();
-    } else {
+    } else if (tab === 'location') {
         fetchSmartAnalysis();
+    } else if (tab === 'audit') {
+        fetchProductivityAnalysis();
     }
 }
 
@@ -118,6 +120,37 @@ async function fetchSmartAnalysis() {
         console.error("Audit Fetch error:", err);
         document.getElementById('lastUpdate').innerText = 'Audit Error';
     }
+}
+
+async function fetchProductivityAnalysis() {
+    try {
+        document.getElementById('lastUpdate').innerText = 'Loading Productivity...';
+        const res = await fetch('/api/inventory/productivity');
+        const data = await res.json();
+
+        if (data.error) {
+            console.warn("Productivity API returned an error:", data.error);
+            document.getElementById('lastUpdate').innerText = 'Notice: ' + data.error;
+            updateProductivityDashboard(data);
+            return;
+        }
+
+        updateProductivityDashboard(data);
+        document.getElementById('lastUpdate').innerText = 'Productivity Updated: ' + new Date().toLocaleTimeString();
+    } catch (err) {
+        console.error("Productivity Fetch error:", err);
+        document.getElementById('lastUpdate').innerText = 'Productivity Error';
+    }
+}
+
+function updateProductivityDashboard(data) {
+    // Update staff productivity chart and table
+    const staffReport = data.staffReport || {};
+    console.log("[Productivity] Staff report received:", Object.keys(staffReport).length, "staff members");
+    console.log("[Productivity] Discrepancies received:", (data.discrepanciesArr || []).length);
+    window.staffFullData = staffReport;
+    window.discrepanciesFullData = data.discrepanciesArr || [];
+    renderStaffTable(staffReport);
 }
 
 function updateAuditDashboard(data) {
@@ -476,7 +509,7 @@ function renderDiscrepancyTable(discrepancies) {
             <td class="px-3 py-3"><span class="text-[10px] px-2 py-1 bg-slate-50 border rounded-md text-slate-600">${d.locationStatus}</span></td>
             <td class="px-3 py-3 whitespace-normal min-w-[120px]">
                 <span class="px-2 py-0.5 rounded text-[10px] font-bold ${d.diff > 0 ? 'bg-orange-100 text-orange-700' : d.diff < 0 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}">
-                    ${d.productStatus || (d.diff > 0 ? 'Extra' : d.diff < 0 ? 'Missing' : 'Match')}
+                    ${d.productStatus || (d.diff > 0 ? 'Extra' : d.diff < 0 ? 'Loss' : 'Match')}
                 </span>
             </td>
             <td class="px-3 py-3 font-medium text-slate-800">${d.staffName}</td>
@@ -491,7 +524,7 @@ function renderDiscrepancyTable(discrepancies) {
 async function fetchData() {
     console.log('🔄 fetchData called');
     const search = document.getElementById('searchInput')?.value || '';
-    const type = document.getElementById('typeFilter')?.value || '';
+    const type = '';
     const category = document.getElementById('categoryInput')?.value || '';
     const startDate = document.getElementById('dateFrom')?.value || '';
     const endDate = document.getElementById('dateTo')?.value || '';
@@ -538,13 +571,11 @@ async function fetchData() {
 
 function clearFilters() {
     const searchInput = document.getElementById('searchInput');
-    const typeFilter = document.getElementById('typeFilter');
     const categoryInput = document.getElementById('categoryInput');
     const dateFrom = document.getElementById('dateFrom');
     const dateTo = document.getElementById('dateTo');
 
     if (searchInput) searchInput.value = '';
-    if (typeFilter) typeFilter.value = '';
     if (categoryInput) categoryInput.value = '';
     if (dateFrom) dateFrom.value = '';
     if (dateTo) dateTo.value = '';
@@ -966,7 +997,8 @@ document.getElementById('locationsModal').addEventListener('click', (e) => {
 switchTab('inventory');
 setInterval(() => {
     if (currentTab === 'inventory') fetchData();
-    else fetchSmartAnalysis();
+    else if (currentTab === 'location') fetchSmartAnalysis();
+    else if (currentTab === 'audit') fetchProductivityAnalysis();
 }, 60000); // Refresh every minute
 
 // Attach date filter listeners
@@ -998,23 +1030,55 @@ function renderLocationTable(data, sortBy = 'locations') {
         sortedData.sort((a, b) => b.locationsCount - a.locationsCount);
     }
     
-    locationTable.innerHTML = sortedData.map(item => `
-        <tr class="hover:bg-slate-50 transition-colors">
-            <td class="px-4 py-3 font-bold text-slate-800">${item.name}</td>
-            <td class="px-4 py-3 text-center font-mono text-slate-600">${item.itemId}</td>
-            <td class="px-4 py-3 text-center">
-                <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
-                    ${item.locationsCount}
-                </span>
-            </td>
-            <td class="px-4 py-3 text-center">
-                <button onclick="showLocationsModal('${item.productId}')" 
-                        class="px-3 py-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
-                    View
-                </button>
-            </td>
-        </tr>
-    `).join('');
+    locationTable.innerHTML = sortedData.map(item => {
+        // Calculate Total Final QTY and Total Sys QTY from discrepancies
+        let totalFinalQty = 0;
+        let totalSysQty = 0;
+        
+        (item.discrepancies || []).forEach(d => {
+            totalFinalQty += parseFloat(d.physicalQty || d.finalQty || 0) || 0;
+            totalSysQty += parseFloat(d.systemQty || 0) || 0;
+        });
+        
+        // Determine Status based on comparison
+        let status = '';
+        let statusClass = '';
+        if (totalFinalQty === totalSysQty) {
+            status = 'Match';
+            statusClass = 'bg-green-100 text-green-700';
+        } else if (totalFinalQty > totalSysQty) {
+            status = 'Extra';
+            statusClass = 'bg-orange-100 text-orange-700';
+        } else {
+            status = 'Loss';
+            statusClass = 'bg-red-100 text-red-700';
+        }
+        
+        return `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-4 py-3 font-bold text-slate-800">${item.name}</td>
+                <td class="px-4 py-3 text-center font-mono text-slate-600">${item.itemId}</td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
+                        ${item.locationsCount}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center font-bold text-slate-800">${totalFinalQty.toLocaleString()}</td>
+                <td class="px-4 py-3 text-center font-bold text-slate-800">${totalSysQty.toLocaleString()}</td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-1 text-xs font-bold rounded ${statusClass}">
+                        ${status}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <button onclick="showLocationsModal('${item.productId}')" 
+                            class="px-3 py-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
+                        View
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 // Setup Location Filters
@@ -1081,6 +1145,13 @@ function setupLocationFilters() {
 // Staff Table
 function renderStaffTable(staffData) {
     const staffTbody = document.getElementById('staffTable');
+    if (!staffTbody) {
+        console.error('[Staff] staffTable element not found');
+        return;
+    }
+    
+    console.log('[Staff] Rendering staff table with', Object.keys(staffData).length, 'entries');
+    
     staffTbody.innerHTML = Object.entries(staffData)
         .sort((a, b) => b[1].total - a[1].total)
         .filter(([name]) => name !== 'System')
@@ -1175,20 +1246,20 @@ function renderStaffChart(staffData) {
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'top',
                     labels: {
-                        font: { size: 12, weight: 'bold' },
-                        padding: 15
+                        font: { size: 14, weight: 'bold' },
+                        padding: 20
                     }
                 },
                 title: {
                     display: true,
                     text: 'Items Audited per Staff Member',
-                    font: { size: 14, weight: 'bold' },
-                    padding: { bottom: 20 }
+                    font: { size: 16, weight: 'bold' },
+                    padding: { bottom: 25 }
                 },
                 tooltip: {
                     callbacks: {
@@ -1206,17 +1277,21 @@ function renderStaffChart(staffData) {
                     title: {
                         display: true,
                         text: 'Number of Items',
-                        font: { size: 12, weight: 'bold' }
+                        font: { size: 14, weight: 'bold' }
                     },
                     ticks: {
-                        precision: 0
+                        precision: 0,
+                        font: { size: 12 }
                     }
                 },
                 x: {
                     title: {
                         display: true,
                         text: 'Staff Members',
-                        font: { size: 12, weight: 'bold' }
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    ticks: {
+                        font: { size: 11 }
                     }
                 }
             }

@@ -103,19 +103,10 @@
 
             <!-- Filters Section -->
             <div class="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-8">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Search</label>
                         <input type="text" id="searchInput" placeholder="Code, Name, or Breadfast ID..." class="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Smart View</label>
-                        <select id="typeFilter" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
-                            <option value="">All Products</option>
-                            <option value="increased">Increased Today</option>
-                            <option value="decreased">Decreased Today</option>
-                            <option value="stable">Stable</option>
-                        </select>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Category</label>
@@ -377,6 +368,9 @@
                                     <th class="px-4 py-3 text-left">Product Name</th>
                                     <th class="px-4 py-3 text-center">Item ID</th>
                                     <th class="px-4 py-3 text-center">Locations Count</th>
+                                    <th class="px-4 py-3 text-center">Total Physical QTY</th>
+                                    <th class="px-4 py-3 text-center">Total Sys QTY</th>
+                                    <th class="px-4 py-3 text-center">QTY Status</th>
                                     <th class="px-4 py-3 text-center">View Locations</th>
                                 </tr>
                             </thead>
@@ -569,8 +563,8 @@
                 <!-- Staff Productivity Chart -->
                 <div class="p-6 border-t border-slate-200">
                     <h3 class="text-lg font-bold text-slate-800 mb-4">📊 Staff Productivity Overview</h3>
-                    <div class="bg-slate-50 rounded-lg p-4">
-                        <canvas id="staffProductivityChart" class="max-h-80"></canvas>
+                    <div class="bg-slate-50 rounded-lg p-4" style="height: 700px;">
+                        <canvas id="staffProductivityChart"></canvas>
                     </div>
                 </div>
             </div>

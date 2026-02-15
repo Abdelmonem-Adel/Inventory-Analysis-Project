@@ -65,14 +65,14 @@ export const getInventoryAnalysis = async (req, res, next) => {
         const titles = await listSheetTitles();
         console.log("[Analysis] Spreadsheet titles:", titles.join(", "));
 
-        // Find best match for "sheet2" (case-insensitive, whitespace-flexible)
-        const targetPattern = /sheet\s*2/i;
+        // Find best match for "locations acu" (case-insensitive)
+        const targetPattern = /locations\s*acu/i;
         const bestMatch = titles.find(t => targetPattern.test(t));
 
         if (!bestMatch) {
             console.error("[Analysis] No valid audit sheet found.");
             return res.json({
-                error: `Sheet 'sheet2' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
+                error: `Sheet 'locations acu' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
                 kpis: { overallAccuracy: 0, totalMatched: 0, totalExtra: 0, totalMissing: 0 },
                 alerts: [],
                 chartData: { locationAccuracy: { labels: [], datasets: [] }, statusDistribution: { labels: [], datasets: [] } },
@@ -98,6 +98,49 @@ export const getInventoryAnalysis = async (req, res, next) => {
         res.json(analysisResults);
     } catch (error) {
         console.error("[Analysis Controller Error]", error.message);
+        next(error);
+    }
+};
+
+export const getProductivityAnalysis = async (req, res, next) => {
+    try {
+        console.log("[Productivity] Identifying Productivity sheet...");
+        const titles = await listSheetTitles();
+        console.log("[Productivity] Spreadsheet titles:", titles.join(", "));
+
+        // Find best match for "Productivity" (case-insensitive)
+        const targetPattern = /productivity/i;
+        const bestMatch = titles.find(t => targetPattern.test(t));
+
+        if (!bestMatch) {
+            console.error("[Productivity] No valid Productivity sheet found.");
+            return res.json({
+                error: `Sheet 'Productivity' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
+                kpis: { overallAccuracy: 0, totalMatched: 0, totalExtra: 0, totalMissing: 0 },
+                alerts: [],
+                chartData: { locationAccuracy: { labels: [], datasets: [] }, statusDistribution: { labels: [], datasets: [] } },
+                expiryAnalysis: { expired: [], expiring7Days: [], expiring30Days: [] },
+                insights: [],
+                staffReport: {},
+                discrepanciesArr: []
+            });
+        }
+
+        console.log(`[Productivity] ✓ Found match: "${bestMatch}". Loading data...`);
+        const rawData = await readSheet(process.env.SPREADSHEET_ID, bestMatch);
+
+        if (!rawData || rawData.length === 0) {
+            console.warn(`[Productivity] ✗ Sheet "${bestMatch}" is empty or has no data rows.`);
+            return res.json({ error: `Sheet "${bestMatch}" is empty.` });
+        }
+
+        console.log(`[Productivity] ✓ Successfully loaded ${rawData.length} rows from "${bestMatch}"`);
+        console.log(`[Productivity] Sample headers:`, Object.keys(rawData[0] || {}).slice(0, 10).join(', '));
+
+        const analysisResults = analyzeInventory(rawData);
+        res.json(analysisResults);
+    } catch (error) {
+        console.error("[Productivity Controller Error]", error.message);
         next(error);
     }
 };

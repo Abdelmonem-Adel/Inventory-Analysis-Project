@@ -43,7 +43,7 @@ export function analyzeInventory(data) {
         alerts: [],
         chartData: {
             locationAccuracy: { labels: [], datasets: [] },
-            statusDistribution: { labels: ['Matched', 'Extra', 'Missing'], datasets: [] },
+            statusDistribution: { labels: ['Matched', 'Extra', 'Loss'], datasets: [] },
             expirySeverity: { labels: ['Critical (Expired)', 'Warning (7d)', 'Info (30d)'], datasets: [] }
         }
     };
@@ -69,8 +69,8 @@ export function analyzeInventory(data) {
             return null;
         };
 
-        // Map to actual Sheet2 column names
-        const location = findVal(['productlocation', 'location', 'warehouse', 'store', 'loc', 'aisle', 'bin', 'branch', 'site', 'wh']) || row._sheetName || 'Unknown';
+        // Map to actual locations acu column names - prioritize "Location" column
+        const location = findVal(['location', 'productlocation', 'warehouse', 'store', 'loc', 'aisle', 'bin', 'branch', 'site', 'wh']) || row._sheetName || 'Unknown';
         const productName = findVal(['productname', 'name', 'item', 'product', 'description', 'desc']);
         let productId = findVal(['itemid', 'productid', 'sku', 'barcode', 'productcode', 'code', 'id', 'breadfastid', 'ean']);
         if (productId) productId = String(productId).trim().toLowerCase();
@@ -363,7 +363,7 @@ export function analyzeInventory(data) {
 
     // Sort discrepancies by absolute difference
     analysis.discrepancies.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-    analysis.discrepanciesArr = analysis.discrepancies.slice(0, 500);
+    analysis.discrepanciesArr = analysis.discrepancies; // Return all locations without limit
 
     // Finalize Global KPIs
     analysis.kpis.overallAccuracy = Math.round((analysis.kpis.totalMatched / analysis.kpis.totalRows) * 100);
