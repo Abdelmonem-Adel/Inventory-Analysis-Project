@@ -2,6 +2,7 @@ import { readSheet, listSheetTitles } from "../../services/sheet.service.js";
 import { processInventoryData, calculateKPIs, getUniqueLatestProducts } from "../Util/analytics.js";
 import { applyFilters } from "../Util/filters.js";
 import { analyzeInventory } from "../Util/smartAnalysis.js";
+import { processProductivityData } from "../Util/productivityAnalytics.js";
 
 
 export const getInventoryDashboard = async (req, res, next) => {
@@ -42,14 +43,22 @@ export const getInventoryDashboard = async (req, res, next) => {
         // 5. Recalculate KPIs based on Filtered Data
         const dynamicKPIs = calculateKPIs(filteredProducts);
 
-        // 6. Generate Unique Latest Products for Dashboard Table
+        // 6. Generate Expiry Analysis (Smart Analysis on Sheet 1 Data)
+        // This will find expiry dates if columns like 'Expiration Date', 'Expiry' exist in Sheet 1
+        console.log("[Inventory] Running Expiry Analysis on Sheet 1 data...");
+        const smartAnalysis = analyzeInventory(rawData);
+        const expiryAnalysis = smartAnalysis ? smartAnalysis.expiryAnalysis : { expired: [], expiring7Days: [], alerts: [] };
+        console.log(`[Inventory] Expiry Analysis: ${expiryAnalysis.expired.length} expired, ${expiryAnalysis.expiring7Days.length} expiring soon.`);
+
+        // 7. Generate Unique Latest Products for Dashboard Table
         const uniqueProducts = getUniqueLatestProducts(filteredProducts);
 
-        // 7. Return Response
+        // 8. Return Response
         res.json({
             products: filteredProducts,
             uniqueProducts: uniqueProducts,
             kpis: dynamicKPIs,
+            expiryAnalysis: expiryAnalysis, // Added to response
             meta: {
                 timestamp: new Date().toISOString()
             }
@@ -137,10 +146,28 @@ export const getProductivityAnalysis = async (req, res, next) => {
         console.log(`[Productivity] ✓ Successfully loaded ${rawData.length} rows from "${bestMatch}"`);
         console.log(`[Productivity] Sample headers:`, Object.keys(rawData[0] || {}).slice(0, 10).join(', '));
 
+        // 1. Existing Analysis (Staff Error, Discrepancies, etc.)
         const analysisResults = analyzeInventory(rawData);
-        res.json(analysisResults);
+
+        // 2. New Hourly Productivity Analysis (Grouped by User/Date/Hour)
+        const hourlyProductivity = processProductivityData(rawData);
+        
+        console.log(`[Productivity] Processed ${hourlyProductivity.length} grouped hourly entries.`);
+
+        // Merge results
+        res.json({
+            ...analysisResults, // spread existing results (staffReport, etc.)
+            hourlyProductivity: hourlyProductivity, // add new data
+            meta: {
+                timestamp: new Date().toISOString(),
+                sheetName: bestMatch,
+                count: rawData.length
+            }
+        });
     } catch (error) {
         console.error("[Productivity Controller Error]", error.message);
         next(error);
     }
 };
+
+

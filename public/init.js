@@ -14,7 +14,8 @@
         closeLocationsModal: window.closeLocationsModal || function(){},
         showLocationsModal: window.showLocationsModal || function(){},
         filterStaffByDate: window.filterStaffByDate || function(){},
-        clearStaffDateFilter: window.clearStaffDateFilter || function(){}
+        clearStaffDateFilter: window.clearStaffDateFilter || function(){},
+        exportCurrentInventory: window.exportCurrentInventory || function(){}
     };
     
     // Expose all to window

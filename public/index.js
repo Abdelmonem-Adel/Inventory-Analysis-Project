@@ -146,12 +146,195 @@ async function fetchProductivityAnalysis() {
 function updateProductivityDashboard(data) {
     // Update staff productivity chart and table
     const staffReport = data.staffReport || {};
+    const hourlyData = data.hourlyProductivity || []; // New Data
+    
     console.log("[Productivity] Staff report received:", Object.keys(staffReport).length, "staff members");
+    console.log("[Productivity] Hourly entries received:", hourlyData.length);
     console.log("[Productivity] Discrepancies received:", (data.discrepanciesArr || []).length);
+    
     window.staffFullData = staffReport;
     window.discrepanciesFullData = data.discrepanciesArr || [];
+    
+    // Render existing staff report
     renderStaffTable(staffReport);
+    
+    // Store globally for filtering
+    window.fullHourlyData = hourlyData;
+
+    // Populate Employee Filter Dropdown
+    populateProductivityEmployeeFilter(hourlyData);
+
+    // Apply default filters (1-8 hours) if first load
+    // But let's just render all first, user can filter later or we can set defaults in HTML
+    renderHourlyProductivityTable(hourlyData);
 }
+
+function populateProductivityEmployeeFilter(data) {
+    const selector = document.getElementById('prodEmployeeFilter');
+    if (!selector) return;
+
+    // Get unique employees
+    const employees = [...new Set(data.map(item => item.employee))].sort();
+
+    // Preserve current selection if any
+    const currentVal = selector.value;
+
+    selector.innerHTML = '<option value="all">All Employees</option>';
+    employees.forEach(emp => {
+        const opt = document.createElement('option');
+        opt.value = emp;
+        opt.innerText = emp;
+        selector.appendChild(opt);
+    });
+
+    if (employees.includes(currentVal)) {
+        selector.value = currentVal;
+    }
+}
+
+// Global functions for HTML access
+window.exportCurrentInventory = function() {
+    // Use the correctly filtered list from updateDashboard
+    const dataToExport = window.currentFilteredProducts || allData;
+
+    if (!dataToExport || dataToExport.length === 0) {
+        alert("No data available to export.");
+        return;
+    }
+
+    const headers = [
+        "Product Code", 
+        "Product Name", 
+        "Category", 
+        "Current Quantity",
+        "History Date",
+        "Physical Qty",
+        "Stock Qty",
+        "Discrepancy"
+    ];
+
+    const rows = [];
+
+    dataToExport.forEach(p => {
+        const baseInfo = [
+            p.ProductCode,
+            `"${String(p.ProductName || '').replace(/"/g, '""')}"`,
+            `"${String(p.Category || '').replace(/"/g, '""')}"`,
+            p.currentQuantity
+        ];
+
+        // Check if history exists and is not empty
+        if (p.history && Array.isArray(p.history) && p.history.length > 0) {
+            // Sort history by date (newest first usually preferred, or oldest first)
+            const sortedHistory = [...p.history].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            sortedHistory.forEach(h => {
+                const queryDate = h.formattedDate || (h.date ? new Date(h.date).toISOString().split('T')[0] : 'N/A');
+                
+                const discrepancy = (h.quantity || 0) - (h.sysQty || 0);
+                rows.push([
+                    ...baseInfo,
+                    queryDate,
+                    h.quantity,
+                    h.sysQty || 0,
+                    discrepancy
+                ]);
+            });
+        } else {
+            // No history, just export product row with empty history fields
+            rows.push([
+                ...baseInfo,
+                "", "", "", ""
+            ]);
+        }
+    });
+
+    const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `inventory_history_export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+// Helper for Ghost Table button
+window.openLocationFilter = function(locationName) {
+    const searchInput = document.getElementById('auditSearchInput');
+    if (searchInput) {
+        searchInput.value = locationName;
+        // Trigger the search logic
+        const event = new Event('input');
+        searchInput.dispatchEvent(event);
+        
+        // Scroll to the main table
+        const table = document.getElementById('discrepancyTable');
+        if (table) table.scrollIntoView({ behavior: 'smooth' });
+    }
+};
+
+window.applyProductivityFilters = function() {
+    if (!window.fullHourlyData) return;
+
+    const empFilter = document.getElementById('prodEmployeeFilter').value;
+    const dateFromVal = document.getElementById('prodDateFrom').value;
+    const dateToVal = document.getElementById('prodDateTo').value;
+    const hourFrom = parseInt(document.getElementById('prodHourFrom').value);
+    const hourTo = parseInt(document.getElementById('prodHourTo').value);
+
+    // Helper to parse "M/D/YYYY" from data to Date object for comparison
+    const parseRowDate = (dateStr) => {
+        const parts = dateStr.split('/');
+        // parts[0] = M, parts[1] = D, parts[2] = YYYY
+        return new Date(parts[2], parts[0] - 1, parts[1]);
+    };
+
+    // Parse Filter Dates
+    const dateFrom = dateFromVal ? new Date(dateFromVal) : null;
+    if (dateFrom) dateFrom.setHours(0,0,0,0);
+    
+    const dateTo = dateToVal ? new Date(dateToVal) : null;
+    if (dateTo) dateTo.setHours(23,59,59,999);
+
+    const filtered = window.fullHourlyData.filter(row => {
+        // 1. Employee Filter
+        if (empFilter !== 'all' && row.employee !== empFilter) return false;
+
+        // 2. Hour Filter
+        const rowHour = parseInt(row.hour);
+        if (!isNaN(hourFrom) && rowHour < hourFrom) return false;
+        if (!isNaN(hourTo) && rowHour > hourTo) return false;
+
+        // 3. Date Filter
+        if (dateFrom || dateTo) {
+            const rowDate = parseRowDate(row.date);
+            if (dateFrom && rowDate < dateFrom) return false;
+            if (dateTo && rowDate > dateTo) return false;
+        }
+
+        return true;
+    });
+
+    renderHourlyProductivityTable(filtered);
+};
+
+window.clearProductivityFilters = function() {
+    document.getElementById('prodEmployeeFilter').value = 'all';
+    document.getElementById('prodDateFrom').value = '';
+    document.getElementById('prodDateTo').value = '';
+    // Set default range as requested: 1 to 8
+    document.getElementById('prodHourFrom').value = '1';
+    document.getElementById('prodHourTo').value = '8';
+
+    // Re-apply
+    window.applyProductivityFilters();
+};
 
 function updateAuditDashboard(data) {
     // Alerts
@@ -352,6 +535,47 @@ function updateAuditDashboard(data) {
     // Top 5 Items with Most Not Match Locations (Extra or Loss)
     const problematicDiv = document.getElementById('problematicList');
     const itemNotMatchCounts = {};
+
+    // Ghost Items (System Qty 0 but Found > 0)
+    const ghostTable = document.getElementById('ghostTable');
+    const ghostCountEl = document.getElementById('ghostCount');
+    
+    if (ghostTable) {
+        // Filter logic: System Qty is 0 (or implies 0) AND Found Qty > 0
+        const ghostItems = discList.filter(d => {
+            const sys = parseFloat(d.systemQty) || 0;
+            const found = parseFloat(d.finalQty) || parseFloat(d.physicalQty) || 0;
+            // Also exclude cases where BOTH are 0 (matched empty)
+            return sys === 0 && found > 0;
+        });
+        
+        if (ghostCountEl) ghostCountEl.innerText = `${ghostItems.length} Items`;
+        
+        // Sort by Found Qty Descending (biggest surprises first)
+        ghostItems.sort((a, b) => (parseFloat(b.finalQty)||0) - (parseFloat(a.finalQty)||0));
+
+        if (ghostItems.length === 0) {
+            ghostTable.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">No ghost items found. Great job!</td></tr>';
+        } else {
+            // Limit to top 100 for performance
+            ghostTable.innerHTML = ghostItems.slice(0, 100).map(item => `
+                <tr class="hover:bg-purple-50 transition-colors">
+                    <td class="px-6 py-4 font-medium text-slate-700">${item.location || 'Unknown'}</td>
+                    <td class="px-6 py-4">
+                        <p class="font-semibold text-slate-800">${item.product}</p>
+                        <p class="text-xs text-slate-400 font-mono">${item.productId}</p>
+                    </td>
+                    <td class="px-6 py-4 text-right text-slate-400 font-mono">0</td>
+                    <td class="px-6 py-4 text-right font-bold text-purple-700">+${item.finalQty || item.physicalQty}</td>
+                    <td class="px-6 py-4 text-right">
+                        <button onclick="window.openLocationFilter('${item.location}')" class="text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-2 py-1 rounded shadow-sm">
+                            Inspect Loc.
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+    }
     
     discList.forEach(d => {
         const productId = d.productId || 'Unknown';
@@ -639,6 +863,9 @@ function updateDashboard(data) {
 
     const productsToRender = data.uniqueProducts || data.products;
 
+    // Save for export
+    window.currentFilteredProducts = productsToRender;
+
     if (productsToRender.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">No products found matching filters.</td></tr>';
         console.log('⚠️ No products to display');
@@ -678,6 +905,38 @@ function updateDashboard(data) {
     if (data.products.length > 0) {
         if (!chart) showTrend(data.products[0]);
         updateCategoryChart(data.products);
+    }
+
+    // Render Expiry Table (From Sheet 1)
+    const expiryTbody = document.getElementById('expiryTable');
+    if (expiryTbody && data.expiryAnalysis) {
+        // Concatenate Expired + 7 Days + 30 Days arrays to cover all critical items
+        const expiryRows = (data.expiryAnalysis.expired || [])
+            .concat(data.expiryAnalysis.expiring7Days || [])
+            .concat(data.expiryAnalysis.expiring30Days || []);
+        
+        // Sort by date ascending (closest to expire/expired first)
+        expiryRows.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+        
+        const countEl = document.getElementById('expiryCount');
+        if(countEl) countEl.innerText = `${expiryRows.length} Items`;
+
+        if (expiryRows.length === 0) {
+            expiryTbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">No critical expiry alerts found.</td></tr>';
+        } else {
+            expiryTbody.innerHTML = expiryRows.map(item => `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-6 py-4">
+                        <p class="font-semibold text-slate-800">${item.productName}</p>
+                        <p class="text-xs text-slate-400 font-mono">${item.productId}</p>
+                    </td>
+                    <td class="px-6 py-4 text-slate-600">${item.location || item.warehouse || 'Main'}</td>
+                    <td class="px-6 py-4 text-right font-bold ${new Date(item.expiryDate) < new Date() ? 'text-red-600' : 'text-orange-600'}">
+                        ${new Date(item.expiryDate).toLocaleDateString()}
+                    </td>
+                </tr>
+            `).join('');
+        }
     }
 
     console.log('✨ updateDashboard complete');
@@ -1387,6 +1646,55 @@ console.log('✅ All functions exposed:', {
     fetchData: typeof window.fetchData,
     fetchSmartAnalysis: typeof window.fetchSmartAnalysis
 });
+
+
+function renderHourlyProductivityTable(groupedData) {
+    const tableBody = document.getElementById('productivityTable');
+    const statsDiv = document.getElementById('productivityStats');
+    
+    if (!tableBody) {
+        console.warn('productivityTable element not found');
+        return;
+    }
+
+    if (!groupedData || groupedData.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-slate-500">No hourly data available.</td></tr>';
+        if (statsDiv) statsDiv.innerText = '0 Entries';
+        return;
+    }
+
+    // Update stats
+    if (statsDiv) {
+        const totalQty = groupedData.reduce((acc, curr) => acc + (curr.totalQuantity || 0), 0);
+        statsDiv.innerText = `${groupedData.length} Entries | Total Qty: ${totalQty.toLocaleString()}`;
+    }
+
+    // Generate Rows
+    let rowsHTML = '';
+    groupedData.forEach(row => {
+        // row structure: { employee, date, hour, totalTasks }
+        rowsHTML += `
+            <tr class="hover:bg-slate-50 border-b border-slate-50">
+                <td class="px-6 py-3 font-medium text-slate-800">${row.employee}</td>
+                <td class="px-6 py-3 text-slate-600">${row.date}</td>
+                <td class="px-6 py-3 text-slate-600">
+                    <span class="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold">${row.hour}:00</span>
+                </td>
+                <td class="px-6 py-3 text-right">
+                    <span class="font-bold text-slate-900">${row.totalTasks}</span>
+                </td>
+                <td class="px-6 py-3 text-right">
+                    <span class="font-bold text-purple-700">${(row.totalQuantity || 0).toLocaleString()}</span>
+                </td>
+                <td class="px-6 py-3 text-right">
+                    <span class="font-bold text-green-700">${(row.uniqueProducts || 0).toLocaleString()}</span>
+                </td>
+            </tr>
+        `;
+    });
+
+    tableBody.innerHTML = rowsHTML;
+}
 
 // Initialize dashboard on page load
 window.addEventListener('DOMContentLoaded', function () {
