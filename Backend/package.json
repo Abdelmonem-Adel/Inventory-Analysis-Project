@@ -9,6 +9,9 @@
     "dev": "nodemon src/index.js",
     "test:report": "node test-report.js"
   },
+
+  "engines": {"node": "22.15.0"},
+
   "keywords": [],
   "author": "",
   "license": "ISC",

@@ -42,12 +42,13 @@ export function processInventoryData(data, startDate = null, endDate = null) {
         let BreadfastID = findVal(['breadfastid', 'bfid', 'itemid']);
         let ProductName = findVal(['productname', 'name', 'item']);
         const CountDate = findVal(['date', 'countdate']);
-        const Quantity = findVal(['physicalqty', 'num', 'quantity', 'qty', 'count', 'stockqty']);
+        const Quantity = findVal(['finalqty', 'final qty', 'final_qty', 'physicalqty', 'num', 'quantity', 'qty', 'count', 'stockqty']);
         const SystemQuantity = findVal(['sysqty', 'systemqty', 'stockqty', 'logicalqty', 'bookqty', 'logicqty', 'expected', 'expectedqty', 'system']);
-        const ProductStatus = findVal(['Proudact Status', 'proudactstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus', 'proudactstatus', 'loc.status']);
+        const ProductStatus = findVal(['Product Status', 'Proudact Status', 'proudactstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus', 'proudactstatus', 'loc.status']);
         const rawCat = findVal(['product/productcategory', 'category', 'type', 'cat']);
         const Category = (rawCat ? String(rawCat) : 'Other').trim();
         const Warehouse = findVal(['warehouse', 'location', 'store']) || 'Main';
+        const FinalQTY = findVal(['finalqty', 'final qty', 'final_qty', 'finalqtyoriginal']);
 
         if (ProductCode) ProductCode = String(ProductCode).trim().toLowerCase();
         if (BreadfastID) BreadfastID = String(BreadfastID).trim().toLowerCase();
@@ -65,29 +66,46 @@ export function processInventoryData(data, startDate = null, endDate = null) {
         const ProductNameKey = ProductName ? ProductName.trim().toLowerCase() : '';
         const productKey = `${ProductCode}|${ProductNameKey}`;
 
-        let parsedDate = new Date(CountDate);
 
-        // Handle Excel Serial Dates (if applicable)
-        if (isNaN(parsedDate.getTime()) && !isNaN(CountDate)) {
+        // معالجة التاريخ بشكل ذكي
+        let parsedDate = null;
+        if (!CountDate) {
+            parsedDate = new Date('Invalid');
+        } else if (CountDate instanceof Date) {
+            parsedDate = CountDate;
+        } else if (!isNaN(CountDate) && String(Number(CountDate)).length >= 5) {
+            // Excel serial
             const excelSerial = parseFloat(CountDate);
             parsedDate = new Date(Date.UTC(1899, 11, 30) + excelSerial * 86400 * 1000);
-        }
-
-        // Fix Date For standard parser
-        if (typeof CountDate === 'string' && CountDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // "2023-10-27" -> "2023/10/27" to force local time parsing or add time
-            parsedDate = new Date(CountDate + 'T00:00:00');
-        }
-
-        // Handle explicit mm/dd/yyyy string
-        if (isNaN(parsedDate.getTime()) && typeof CountDate === 'string' && CountDate.includes('/')) {
-            const parts = CountDate.split('/');
-            if (parts.length === 3) {
-                const mm = parseInt(parts[0]) - 1;
-                const dd = parseInt(parts[1]);
-                const yyyy = parseInt(parts[2]);
-                parsedDate = new Date(yyyy, mm, dd);
+        } else if (typeof CountDate === 'string') {
+            let str = CountDate.trim();
+            // yyyy-mm-dd or yyyy/mm/dd
+            if (/^\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/.test(str)) {
+                parsedDate = new Date(str.replace(/\//g, '-'));
+            } else if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(str)) {
+                // dd/mm/yyyy or mm/dd/yyyy or dd-mm-yyyy
+                const parts = str.split(/[\/\-]/);
+                let a = parseInt(parts[0]);
+                let b = parseInt(parts[1]);
+                let c = parseInt(parts[2]);
+                // إذا السنة قصيرة
+                if (c < 100) c += 2000;
+                // إذا اليوم أكبر من 12 اعتبره يوم
+                let day, month, year;
+                if (a > 12) {
+                    day = a; month = b; year = c;
+                } else if (b > 12) {
+                    day = b; month = a; year = c;
+                } else {
+                    // لو الاثنين <= 12 اعتبر الأول شهر
+                    month = a; day = b; year = c;
+                }
+                parsedDate = new Date(year, month - 1, day);
+            } else {
+                parsedDate = new Date(str);
             }
+        } else {
+            parsedDate = new Date(CountDate);
         }
 
         if (isNaN(parsedDate.getTime())) {
@@ -98,7 +116,13 @@ export function processInventoryData(data, startDate = null, endDate = null) {
 
         const qty = parseInt(Quantity) || 0;
         const sysQty = parseInt(SystemQuantity) || 0;
-        const status = ProductStatus || 'Matched';
+
+        // توحيد قيم ProductStatus
+        let statusRaw = String(ProductStatus || '').toLowerCase().replace(/\s/g, '');
+        let status = statusRaw;
+        if (statusRaw === 'extra') status = 'gain';
+        else if (statusRaw === 'missing') status = 'loss';
+        else if (statusRaw === 'match') status = 'match';
 
         const rowData = {
             ProductCode,
@@ -109,6 +133,7 @@ export function processInventoryData(data, startDate = null, endDate = null) {
             PhysicalQty: qty,
             SystemQty: sysQty,
             ProductStatus: status,
+            FinalQTY: FinalQTY,
             Date: parsedDate,
             productKey: ProductCode,
             currentQuantity: qty,
@@ -133,14 +158,32 @@ export function processInventoryData(data, startDate = null, endDate = null) {
 
     // 2. Process History and attach to results
     Object.keys(historyMap).forEach(key => {
-        historyMap[key].sort((a, b) => a.date - b.date);
-        historyMap[key] = historyMap[key].map((record, index, arr) => {
+        // Aggregate history by date
+        const aggregatedHistory = {};
+        historyMap[key].forEach(record => {
+            const fDate = formatLocalDate(record.date);
+            if (!aggregatedHistory[fDate]) {
+                aggregatedHistory[fDate] = { ...record, quantity: 0, sysQty: 0, formattedDate: fDate };
+            }
+            aggregatedHistory[fDate].quantity += record.quantity;
+            aggregatedHistory[fDate].sysQty += record.sysQty;
+        });
+
+        // Convert back to array, sort, and recalculate status & diff
+        const sortedAggregated = Object.values(aggregatedHistory).sort((a, b) => a.date - b.date);
+
+        historyMap[key] = sortedAggregated.map((record, index, arr) => {
             const prev = arr[index - 1];
             const diff = prev ? record.quantity - prev.quantity : 0;
+
+            let aggStatus = 'match';
+            if (record.quantity > record.sysQty) aggStatus = 'gain';
+            else if (record.quantity < record.sysQty) aggStatus = 'loss';
+
             return {
                 ...record,
-                diff,
-                formattedDate: formatLocalDate(record.date)
+                status: aggStatus,
+                diff
             };
         });
     });
@@ -200,23 +243,53 @@ export function calculateKPIs(products) {
     let biggestIncrease = { val: 0, product: '' };
     let biggestDecrease = { val: 0, product: '' };
 
+    // 1. Get Unique Latest Products First
+    const latestProductsMap = new Map();
+    products.forEach(p => {
+        if (!latestProductsMap.has(p.ProductCode) || p.Date > latestProductsMap.get(p.ProductCode).Date) {
+            latestProductsMap.set(p.ProductCode, p);
+        }
+    });
+
+    const uniqueLatestProducts = Array.from(latestProductsMap.values());
+
     products.forEach(p => {
         totalQuantity += p.currentQuantity;
 
-        const status = (p.ProductStatus || '').toLowerCase().trim();
+        let statusRaw = String(p.ProductStatus || '').toLowerCase().trim();
+        let status = statusRaw;
+        if (statusRaw === 'extra') status = 'gain';
+        else if (statusRaw === 'missing') status = 'loss';
+        else if (statusRaw === 'match') status = 'match';
 
-        const isExtra = status.includes('extra') || status.includes('increased') || status.includes('زيادة') || status.includes('فائض') || status.includes('بزيادة') || status === '+';
-        const isMissing = status.includes('missing') || status.includes('decreased') || status.includes('ناقص') || status.includes('عجز') || status.includes('بعجز') || status === '-';
+        const isGain = status === 'gain';
+        const isLoss = status === 'loss';
 
-        if (isExtra) {
+        // دعم جميع الأسماء الممكنة لعمود Final QTY
+
+        let finalQty = 0;
+        if (p['FinalQTY']) finalQty = parseInt(p['FinalQTY']) || 0;
+        else if (p['finalqty']) finalQty = parseInt(p['finalqty']) || 0;
+        else if (p['Final QTY']) finalQty = parseInt(p['Final QTY']) || 0;
+        else if (p['finalQtyOriginal']) finalQty = parseInt(p['finalQtyOriginal']) || 0;
+
+        // Log للتحقق من القيم
+        console.log(`[KPI DEBUG] Product: ${p.ProductName}, Status: ${status}, FinalQTY: ${finalQty}, Raw:`, {
+            FinalQTY: p['FinalQTY'],
+            finalqty: p['finalqty'],
+            Final_QTY: p['Final QTY'],
+            finalQtyOriginal: p['finalQtyOriginal']
+        });
+
+        if (isGain) {
             increasedCount++;
-            sumIncreased += p.currentQuantity || 0;
-        } else if (isMissing) {
+            sumIncreased += finalQty;
+        } else if (isLoss) {
             decreasedCount++;
-            sumDecreased += p.currentQuantity || 0;
+            sumDecreased += finalQty;
         } else {
-            stableCount++; // Any other status is Matched (e.g., 'Matched', 'Match', 'Ok', 'مطابق', or even empty)
-            sumStable += p.currentQuantity || 0;
+            stableCount++;
+            sumStable += finalQty;
         }
 
         if (p.lastDiff > biggestIncrease.val) {
@@ -227,40 +300,38 @@ export function calculateKPIs(products) {
         }
     });
 
-    const distinctProducts = new Set(products.map(p => p.ProductCode));
-    const totalRowsCount = products.length;
-    const totalDistinct = distinctProducts.size;
+    const totalDistinct = uniqueLatestProducts.length;
+    const totalRowsCount = products.length; // Keep total rows (audit events) for reference
 
-    // Accuracy and percentages should be based on total records/audits performed
     const accuracy = totalRowsCount > 0 ? Math.round((stableCount / totalRowsCount) * 100) : 0;
 
     const percentStable = totalRowsCount > 0 ? Math.round((stableCount / totalRowsCount) * 100) : 0;
     const percentIncreased = totalRowsCount > 0 ? Math.round((increasedCount / totalRowsCount) * 100) : 0;
     const percentDecreased = totalRowsCount > 0 ? Math.round((decreasedCount / totalRowsCount) * 100) : 0;
 
-    const latestMap = new Map();
-    products.forEach(p => {
-        const existing = latestMap.get(p.ProductCode);
-        if (!existing || p.Date > existing.date) {
-            latestMap.set(p.ProductCode, { date: p.Date, qty: p.currentQuantity });
-        }
-    });
-    let sumLatestTotal = 0;
-    latestMap.forEach(v => sumLatestTotal += v.qty);
+    // دعم جميع الأسماء الممكنة لعمود Final QTY في إجمالي القطع
+    const totalFinalQty = products.reduce((acc, p) => {
+        let finalQty = 0;
+        if (p['FinalQTY']) finalQty = parseInt(p['FinalQTY']) || 0;
+        else if (p['finalqty']) finalQty = parseInt(p['finalqty']) || 0;
+        else if (p['Final QTY']) finalQty = parseInt(p['Final QTY']) || 0;
+        else if (p['finalQtyOriginal']) finalQty = parseInt(p['finalQtyOriginal']) || 0;
+        return acc + finalQty;
+    }, 0);
 
     return {
         totalProducts: totalDistinct, // DISTINCT count as requested
-        totalLatestQuantity: sumLatestTotal, // Sum of LATEST pieces per item
+        totalLatestQuantity: totalFinalQty, // إجمالي Final QTY لكل المنتجات
         totalRecords: totalRowsCount,  // RAW row count
-        totalCurrentQuantity: totalQuantity,
-        productsIncreased: increasedCount,
-        productsDecreased: decreasedCount,
+        totalCurrentQuantity: totalFinalQty, // إجمالي Final QTY لكل المنتجات
+        productsGain: increasedCount,
+        productsLoss: decreasedCount,
         productsStable: stableCount,
-        sumIncreased,
-        sumDecreased,
+        sumGain: sumIncreased,
+        sumLoss: sumDecreased,
         sumStable,
-        percentIncreased,
-        percentDecreased,
+        percentGain: percentIncreased,
+        percentLoss: percentDecreased,
         percentStable,
         accuracy: accuracy,
         biggestDailyIncrease: biggestIncrease,

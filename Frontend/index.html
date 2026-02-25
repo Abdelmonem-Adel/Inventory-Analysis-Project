@@ -6,29 +6,28 @@
     <title>Inventory Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
         .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
     </style>
 </head>
-<body id="inventory-top" class="bg-slate-50 min-h-screen">
+<body id="inventory-top" class="min-h-screen" style="background: linear-gradient(135deg, #f0f4ff 0%, #e8ecf4 50%, #f5f0ff 100%);">
     <div class="max-w-7xl mx-auto px-4 py-8">
         <header class="flex justify-between items-center mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-slate-900">📊Inventory Analysis</h1>
-                <div class="flex gap-4 mt-3">
-                    <button onclick="switchTab('inventory')" id="tab-inventory" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-blue-600 text-white shadow-md">
-                        Product View
-                    </button>
-                    <button onclick="switchTab('location')" id="tab-location" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
-                        Location View
-                    </button>
-                    <button onclick="switchTab('audit')" id="tab-audit" class="px-4 py-2 rounded-lg font-semibold text-sm transition-all bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
-                        Productivity View
-                    </button>
+                <div class="flex items-center gap-3">
+                    <h1 class="text-3xl font-extrabold text-slate-900" style="font-family: 'Poppins', sans-serif; letter-spacing: -0.5px;">Inventory Analysis</h1>
+                    <img src="/Image/BreadFast Logo.png" alt="BreadFast Logo" class="h-10 w-auto">
                 </div>
+                <div class="pt-5 flex flex-wrap gap-2">
+                    <button onclick="showView('inventory')" id="nav-inventory" class="nav-btn active px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 bg-blue-600 text-white shadow-md shadow-blue-100">Inventory View</button>
+                    <button onclick="showView('location')" id="nav-location" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-600 hover:bg-slate-100">Location View</button>
+                    <button onclick="showView('audit')" id="nav-audit" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-slate-600 hover:bg-slate-100">Productivity View</button>
+                </div>
+
             </div>
+
             <div id="lastUpdate" class="text-sm text-slate-400 bg-white px-4 py-2 rounded-full shadow-sm border">
                 Loading...
             </div>
@@ -48,12 +47,12 @@
                     <h3 id="invMatched" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (Count)</p>
-                    <h3 id="invExtra" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Gain (Count)</p>
+                    <h3 id="invGain" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (Count)</p>
-                    <h3 id="invMissing" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (Count)</p>
+                    <h3 id="invLoss" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
             </div>
 
@@ -62,7 +61,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-[-1rem]">
                 <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Total Pieces (Latest)</p>
+                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider text-blue-600">Total Pieces</p>
                     <h3 id="totalPieces" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
@@ -70,12 +69,12 @@
                     <h3 id="invMatchedSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (Sum => per Unit)</p>
-                    <h3 id="invExtraSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Gain (Sum => per Unit)</p>
+                    <h3 id="invGainSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (Sum => per Unit)</p>
-                    <h3 id="invMissingSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (Sum => per Unit)</p>
+                    <h3 id="invLossSum" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
             </div>
 
@@ -92,12 +91,12 @@
                     <h3 id="invMatchedPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (%Percentage)</p>
-                    <h3 id="invExtraPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Gain (%Percentage)</p>
+                    <h3 id="invGainPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
                 </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Missing (%Percentage)</p>
-                    <h3 id="invMissingPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (%Percentage)</p>
+                    <h3 id="invLossPct" class="text-3xl font-bold text-slate-900 mt-1">0%</h3>
                 </div>
             </div>
 
@@ -155,12 +154,23 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Date From</label>
-                        <input type="date" id="dateFrom" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Product Status</label>
+                        <select id="statusInput" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
+                            <option value="">All Statuses</option>
+                            <option value="top_match">Top match</option>
+                            <option value="top_gain">Top Gain</option>
+                            <option value="top_loss">Top loss</option>
+                        </select>
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Date To</label>
-                        <input type="date" id="dateTo" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
+                    <div class="flex flex-col gap-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Date From</label>
+                            <input type="date" id="dateFrom" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Date To</label>
+                            <input type="date" id="dateTo" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
+                        </div>
                     </div>
                     <div class="flex items-end gap-2">
                         <button onclick="fetchData()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
@@ -188,7 +198,7 @@
                                 <tr class="bg-slate-50">
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Product</th>
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Category</th>
-                                    <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Current Qty</th>
+                                    <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Product Status</th>
                                     <th class="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Action</th>
                                 </tr>
                             </thead>
@@ -268,14 +278,7 @@
             <div id="auditAlerts" class="space-y-3 mb-8"></div>
 
             <!-- Audit KPIs -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm">
-                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Overall Accuracy</p>
-                    <h3 id="auditAccuracy" class="text-4xl font-extrabold text-slate-900 mt-1">0%</h3>
-                    <div class="w-full bg-slate-100 h-2 rounded-full mt-3">
-                        <div id="accuracyBar" class="bg-blue-600 h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-blue-500">
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Locations</p>
                     <h3 id="auditTotalLocations" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
@@ -284,9 +287,13 @@
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Match</p>
                     <h3 id="auditTotalMatch" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Extra</p>
+                    <h3 id="auditTotalExtra" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Not Match</p>
-                    <h3 id="auditTotalNotMatch" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Loss</p>
+                    <h3 id="auditTotalLoss" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
             </div>
 
@@ -294,19 +301,25 @@
             <!-- Audit Counts -->
              <div class="flex justify-end">
 
-                <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 place-content-end w-full">
-                <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (Sum => per Unite)</p>
-                    <h3 id="auditMissingCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4 place-content-end w-full">
+                <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500 h-full flex flex-col justify-center">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (Sum => per Unit)</p>
+                    <h3 id="auditLossCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 
-                <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (Sum => per Unite)</p>
-                    <h3 id="auditExtraCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500 h-full flex flex-col justify-center">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Gain (Sum => per Unit)</p>
+                    <h3 id="auditGainCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched Items (Sum => per Unite)</p>
+                <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500 h-full flex flex-col justify-center">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (Sum => per Unit)</p>
                     <h3 id="auditMatchedCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+                <div class="flex flex-col gap-6 w-full h-full">
+                    <div dir="ltr" class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm border-l-4 border-l-blue-500 flex-1 flex flex-col justify-center">
+                        <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Total Pieces</p>
+                        <h3 id="auditTotalPiecesCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    </div>
                 </div>
             </div>
 
@@ -317,19 +330,28 @@
             <!-- Audit Counts (%) -->
             <div class="flex justify-end">
 
-                <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 place-content-end w-full">
+                <div dir="rtl" class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4 place-content-end w-full">
                 <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (%Percentage)</p>
-                    <h3 id="auditMissingPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Loss (% Locations)</p>
+                    <h3 id="auditLossPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 
                 <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-orange-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Extra (%Percentage)</p>
-                    <h3 id="auditExtraPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Gain (% Locations)</p>
+                    <h3 id="auditGainPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
                 <div dir="ltr" class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched Items (%Percentage)</p>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (% Locations)</p>
                     <h3 id="auditMatchedPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+                <div dir="ltr" class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm border-l-4 border-l-blue-500">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overall Accuracy</p>
+                    <div class="flex items-center gap-2 mt-1">
+                        <h3 id="auditAccuracy" class="text-xl font-extrabold text-slate-800">0%</h3>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full flex-1">
+                            <div id="accuracyBar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -361,21 +383,26 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"></path>
                             </svg>
                         </div>
+                        <!-- Category Filter -->
+                        <select id="locationCategoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <option value="all">All Categories</option>
+                        </select>
                         <!-- Sort By -->
                         <select id="locationSortBy" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
                             <option value="locations">Most Locations</option>
                             <option value="topMatch">Top Match</option>
-                            <option value="topNotMatch">Top Not Match</option>
+                            <option value="topNotMatch">Top Miss Match</option>
                         </select>
-                        <!-- Date From -->
-                        <div class="flex items-center gap-1">
-                            <label class="text-xs text-slate-500">From:</label>
-                            <input type="date" id="locationDateFrom" class="px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                        <!-- Date To -->
-                        <div class="flex items-center gap-1">
-                            <label class="text-xs text-slate-500">To:</label>
-                            <input type="date" id="locationDateTo" class="px-2 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        <!-- Date Filters Stacked -->
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <label class="text-xs text-slate-500 w-12">From:</label>
+                                <input type="date" id="locationDateFrom" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <label class="text-xs text-slate-500 w-12">To:</label>
+                                <input type="date" id="locationDateTo" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
                         </div>
                         <!-- Apply Button -->
                         <button id="applyLocationFilters" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors">
@@ -384,6 +411,11 @@
                         <!-- Clear Button -->
                         <button id="clearLocationFilters" class="px-3 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-300 transition-colors">
                             Clear
+                        </button>
+                        <!-- Export Button -->
+                        <button id="exportLocationTable" class="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export CSV
                         </button>
                     </div>
                     
@@ -395,7 +427,7 @@
                                     <th class="px-4 py-3 text-left">Product Name</th>
                                     <th class="px-4 py-3 text-center">Item ID</th>
                                     <th class="px-4 py-3 text-center">Locations Count</th>
-                                    <th class="px-4 py-3 text-center">Total Physical QTY</th>
+                                    <th class="px-4 py-3 text-center">Total FinalQTY</th>
                                     <th class="px-4 py-3 text-center">Total Sys QTY</th>
                                     <th class="px-4 py-3 text-center">QTY Status</th>
                                     <th class="px-4 py-3 text-center">View Locations</th>
@@ -430,10 +462,16 @@
                 <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <div class="flex items-center gap-2">
-                            <h3 class="font-bold text-slate-800">👻 Ghost Locations</h3>
-                            <span class="text-xs text-slate-500">(System Qty = 0, Found > 0)</span>
+                            <h3 class="font-bold text-slate-800">📉 Discrepancy Locations Putaway</h3>
+                            <span class="text-xs text-slate-500">(System Qty = 0, Physical > 0)</span>
                         </div>
-                        <span class="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded" id="ghostCount">0 Items</span>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded" id="ghostCount">0 Items</span>
+                            <button onclick="exportGhostData()" class="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                Export CSV
+                            </button>
+                        </div>
                     </div>
                     <div class="h-[500px] overflow-y-auto">
                         <table class="w-full text-sm text-left">
@@ -456,7 +494,7 @@
                 <!-- Problematic Products (Spans 1/3) -->
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
                     <div class="p-4 border-b border-slate-100 bg-slate-50">
-                        <h3 class="font-bold text-slate-800">⚠️ Top 5 Not Match Items</h3>
+                        <h3 class="font-bold text-slate-800">⚠️ Top 5 Miss Match Items</h3>
                     </div>
                     <div id="problematicList" class="p-4 space-y-4 h-[500px] overflow-y-auto">
                         <!-- Problem products -->
@@ -477,10 +515,12 @@
                             </svg>
                         </div>
 
-                        <div class="flex items-center gap-2">
-                            <input type="date" id="auditDateFrom" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
-                            <input type="date" id="auditDateTo" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
-                            <button id="auditDateClear" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors">Clear</button>
+                        <div class="flex flex-col gap-2">
+                            <div class="flex items-center gap-2">
+                                <input type="date" id="auditDateFrom" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
+                                <input type="date" id="auditDateTo" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
+                            </div>
+                            <button id="auditDateClear" class="w-full px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition-colors">Clear Dates</button>
                         </div>
 
                         <select id="auditCategoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
@@ -489,7 +529,7 @@
 
                         <select id="auditStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
                             <option value="all">All Statuses</option>
-                            <option value="extra">Extra Only</option>
+                            <option value="gain">Gain Only</option>
                             <option value="loss">Loss Only</option>
                             <option value="match">Match Only</option>
                         </select>
@@ -519,7 +559,7 @@
                                 <th class="px-3 py-3">Loc. Status</th>
                                 <th class="px-3 py-3">Prod. Status</th>
                                 <th class="px-3 py-3">User Name</th>
-                                <th class="px-3 py-3 text-center">Emp. Acc.</th>
+                                <th class="px-3 py-3 text-center">Employee Accuracy</th>
                                 <th class="px-3 py-3 text-center">Live</th>
 
                                 <th class="px-3 py-3">Live Wait</th>
@@ -547,6 +587,40 @@
         
         <!-- Audit View (Staff Analysis) -->
         <div id="view-audit" class="hidden">
+            <!-- Productivity KPI Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm border-l-4 border-l-blue-600">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Hourly Productivity</p>
+                    <div class="flex items-baseline gap-4 mt-1">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block">AVG Items</span>
+                            <h3 id="avgWorkerHour" class="text-3xl font-bold text-slate-900">0</h3>
+                        </div>
+                        <div class="border-l border-slate-100 h-8 self-center"></div>
+                        <div>
+                            <span class="text-[10px] text-blue-600 font-bold block">AVG Locs</span>
+                            <h3 id="avgLocsHour" class="text-2xl font-bold text-blue-600">0</h3>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2">Efficiency per man-hour</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-indigo-600">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Daily Productivity</p>
+                    <div class="flex items-baseline gap-4 mt-1">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block">AVG Items</span>
+                            <h3 id="avgWorkerDay" class="text-3xl font-bold text-slate-900">0</h3>
+                        </div>
+                        <div class="border-l border-slate-100 h-8 self-center"></div>
+                        <div>
+                            <span class="text-[10px] text-indigo-600 font-bold block">AVG Locs</span>
+                            <h3 id="avgLocsDay" class="text-2xl font-bold text-indigo-600">0</h3>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2">Efficiency per man-day</p>
+                </div>
+            </div>
+
             <!-- Hourly Productivity Report -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
                 <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
@@ -564,27 +638,38 @@
                         </select>
                     </div>
 
-                    <!-- Date From -->
-                    <div class="w-full md:w-40">
-                        <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Date From</label>
-                        <input type="date" id="prodDateFrom" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-
-                    <!-- Date To -->
-                    <div class="w-full md:w-40">
-                        <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Date To</label>
-                        <input type="date" id="prodDateTo" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
+                    <!-- <div class="flex flex-col gap-2">
+                        <div>
+                            <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Date From</label>
+                            <input type="date" id="prodDateFrom" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Date To</label>
+                            <input type="date" id="prodDateTo" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                    </div> -->
 
                     <!-- Hours Range -->
                     <div class="flex gap-2 items-end">
                         <div class="w-20">
                             <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Hour From</label>
-                            <input type="number" id="prodHourFrom" min="0" max="23" value="1" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                            <input type="number" id="prodHourFrom" min="0" max="23" value="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
                         </div>
                         <div class="w-20">
                             <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Hour To</label>
-                            <input type="number" id="prodHourTo" min="0" max="23" value="8" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                            <input type="number" id="prodHourTo" min="0" max="23" value="23" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-center">
+                        </div>
+                    </div>
+
+
+                    <div class="flex flex-col gap-2">
+                        <div>
+                            <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Date From</label>
+                            <input type="date" id="prodDateFrom" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-slate-500 uppercase mb-1 block">Date To</label>
+                            <input type="date" id="prodDateTo" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                     </div>
 
@@ -632,13 +717,15 @@
                 
                 <!-- Date Filter -->
                 <div class="p-4 border-b border-slate-100 bg-slate-25 flex flex-col md:flex-row gap-4 items-end">
-                    <div class="flex-1">
-                        <label class="text-sm font-semibold text-slate-600 block mb-1">From Date</label>
-                        <input type="date" id="staffDateFrom" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div class="flex-1">
-                        <label class="text-sm font-semibold text-slate-600 block mb-1">To Date</label>
-                        <input type="date" id="staffDateTo" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex flex-col gap-2 w-full md:w-auto">
+                        <div>
+                            <label class="text-sm font-semibold text-slate-600 block mb-1">From Date</label>
+                            <input type="date" id="staffDateFrom" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="text-sm font-semibold text-slate-600 block mb-1">To Date</label>
+                            <input type="date" id="staffDateTo" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
                     </div>
                     <button onclick="filterStaffByDate()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">Filter</button>
                     <button onclick="clearStaffDateFilter()" class="px-4 py-2 bg-slate-300 hover:bg-slate-400 text-slate-800 rounded-lg font-medium transition-colors">Clear</button>
@@ -669,6 +756,10 @@
                 </div>
             </div>
         </div>
+
+        </div>
+    </div>
+
     </div>
 
     <!-- History Modal -->
@@ -688,8 +779,8 @@
                     <thead>
                         <tr class="text-xs text-slate-500 uppercase font-semibold border-b border-slate-100">
                             <th class="pb-3">Date</th>
-                            <th class="pb-3 text-center">Physical QTY</th>
-                            <th class="pb-3 text-center">Stock QTY</th>
+                            <th class="pb-3 text-center">FinalQTY</th>
+                            <th class="pb-3 text-center">Sys QTY</th>
                             <th class="pb-3 text-center">Discrepancy</th>
                         </tr>
                     </thead>

@@ -1,4 +1,5 @@
 @echo off
 echo Starting Inventory Dashboard Server...
-node src/index.js
+cd Backend
+npm start
 pause

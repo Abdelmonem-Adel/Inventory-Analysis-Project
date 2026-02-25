@@ -2,25 +2,20 @@ import { readSheet, listSheetTitles } from "../../services/sheet.service.js";
 import { processInventoryData, calculateKPIs, getUniqueLatestProducts } from "../Util/analytics.js";
 import { applyFilters } from "../Util/filters.js";
 import { analyzeInventory } from "../Util/smartAnalysis.js";
-import { processProductivityData } from "../Util/productivityAnalytics.js";
+import { processProductivityData, calculateProductivityOverview } from "../Util/productivityAnalytics.js";
 
 
 export const getInventoryDashboard = async (req, res, next) => {
     try {
         // 1. Fetch data from Google Sheets
-        // 1. Identify Target Sheet (Sheet1)
-        console.log("[Inventory] identifying data sheet...");
-        const titles = await listSheetTitles();
-        const targetPattern = /sheet\s*1/i;
-        const sheetTitle = titles.find(t => targetPattern.test(t));
 
-        if (!sheetTitle) {
-            console.warn("[Inventory] 'Sheet1' not found. Falling back to reading ALL sheets.");
-        }
+        // 1. Identify Target Sheet (Scans)
+        const sheetTitle = 'Scans';
+        console.log(`[Inventory] Fetching data from sheet: ${sheetTitle}`);
 
         // 2. Fetch Data
-        const rawData = await readSheet(process.env.SPREADSHEET_ID, sheetTitle || null);
-        console.log(`[Inventory] Loaded ${rawData ? rawData.length : 0} rows from ${sheetTitle || 'ALL SHEETS'}`);
+        const rawData = await readSheet(process.env.SPREADSHEET_ID, sheetTitle);
+        console.log(`[Inventory] Loaded ${rawData ? rawData.length : 0} rows from ${sheetTitle}`);
 
         // 3. Check for Empty Data
         if (!rawData || rawData.length === 0) {
@@ -51,7 +46,15 @@ export const getInventoryDashboard = async (req, res, next) => {
         console.log(`[Inventory] Expiry Analysis: ${expiryAnalysis.expired.length} expired, ${expiryAnalysis.expiring7Days.length} expiring soon.`);
 
         // 7. Generate Unique Latest Products for Dashboard Table
-        const uniqueProducts = getUniqueLatestProducts(filteredProducts);
+        let uniqueProducts = getUniqueLatestProducts(filteredProducts);
+
+        // 7.1 Sort Unique Products based on "Top" Filters
+        const { type } = req.query;
+        if (type === 'top_gain') {
+            uniqueProducts.sort((a, b) => ((b.PhysicalQty || 0) - (b.SystemQty || 0)) - ((a.PhysicalQty || 0) - (a.SystemQty || 0)));
+        } else if (type === 'top_loss') {
+            uniqueProducts.sort((a, b) => ((a.SystemQty || 0) - (a.PhysicalQty || 0)) - ((b.SystemQty || 0) - (b.PhysicalQty || 0)));
+        }
 
         // 8. Return Response
         res.json({
@@ -74,14 +77,14 @@ export const getInventoryAnalysis = async (req, res, next) => {
         const titles = await listSheetTitles();
         console.log("[Analysis] Spreadsheet titles:", titles.join(", "));
 
-        // Find best match for "locations acu" (case-insensitive)
-        const targetPattern = /locations\s*acu/i;
+        // Find best match for "Scans" (case-insensitive)
+        const targetPattern = /scans/i;
         const bestMatch = titles.find(t => targetPattern.test(t));
 
         if (!bestMatch) {
             console.error("[Analysis] No valid audit sheet found.");
             return res.json({
-                error: `Sheet 'locations acu' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
+                error: `Sheet 'Scans' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
                 kpis: { overallAccuracy: 0, totalMatched: 0, totalExtra: 0, totalMissing: 0 },
                 alerts: [],
                 chartData: { locationAccuracy: { labels: [], datasets: [] }, statusDistribution: { labels: [], datasets: [] } },
@@ -117,14 +120,14 @@ export const getProductivityAnalysis = async (req, res, next) => {
         const titles = await listSheetTitles();
         console.log("[Productivity] Spreadsheet titles:", titles.join(", "));
 
-        // Find best match for "Productivity" (case-insensitive)
-        const targetPattern = /productivity/i;
+        // Find best match for "Scans" (case-insensitive)
+        const targetPattern = /scans/i;
         const bestMatch = titles.find(t => targetPattern.test(t));
 
         if (!bestMatch) {
             console.error("[Productivity] No valid Productivity sheet found.");
             return res.json({
-                error: `Sheet 'Productivity' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
+                error: `Sheet 'Scans' not found. Available: ${titles.slice(0, 5).join(", ")}...`,
                 kpis: { overallAccuracy: 0, totalMatched: 0, totalExtra: 0, totalMissing: 0 },
                 alerts: [],
                 chartData: { locationAccuracy: { labels: [], datasets: [] }, statusDistribution: { labels: [], datasets: [] } },
@@ -151,13 +154,14 @@ export const getProductivityAnalysis = async (req, res, next) => {
 
         // 2. New Hourly Productivity Analysis (Grouped by User/Date/Hour)
         const hourlyProductivity = processProductivityData(rawData);
-        
+        const productivityKPIs = calculateProductivityOverview(rawData);
         console.log(`[Productivity] Processed ${hourlyProductivity.length} grouped hourly entries.`);
 
         // Merge results
         res.json({
             ...analysisResults, // spread existing results (staffReport, etc.)
             hourlyProductivity: hourlyProductivity, // add new data
+            productivityKPIs: productivityKPIs, // add new KPIs
             meta: {
                 timestamp: new Date().toISOString(),
                 sheetName: bestMatch,
