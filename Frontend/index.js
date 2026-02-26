@@ -92,7 +92,10 @@ function showView(viewId) {
 async function fetchSmartAnalysis() {
     try {
         document.getElementById('lastUpdate').innerText = 'Analyzing Audit...';
-        const res = await fetch('/api/inventory/analysis');
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        const res = await fetch('/api/inventory/analysis', {
+            headers: { 'Authorization': `Bearer ${userInfo?.token}` }
+        });
         const data = await res.json();
 
         if (data.error) {
@@ -116,7 +119,10 @@ async function fetchSmartAnalysis() {
 async function fetchProductivityAnalysis() {
     try {
         document.getElementById('lastUpdate').innerText = 'Loading Productivity...';
-        const res = await fetch('/api/inventory/productivity');
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        const res = await fetch('/api/inventory/productivity', {
+            headers: { 'Authorization': `Bearer ${userInfo?.token}` }
+        });
         const data = await res.json();
 
         if (data.error) {
@@ -480,48 +486,32 @@ function updateAuditDashboard(data) {
     const itemNotMatchCounts = {};
 
     // Ghost Items (System Qty 0 but Found > 0)
-    const ghostTable = document.getElementById('ghostTable');
     const ghostCountEl = document.getElementById('ghostCount');
 
-    if (ghostTable) {
-        // Filter logic: System Qty is 0 (or implies 0) AND Found Qty > 0
-        const ghostItems = discList.filter(d => {
-            const sys = parseFloat(d.systemQty) || 0;
-            const found = parseFloat(d.finalQty) || parseFloat(d.physicalQty) || 0;
-            // Also exclude cases where BOTH are 0 (matched empty)
-            return sys === 0 && found > 0;
-        });
+    // Filter logic: System Qty is 0 (or implies 0) AND Found Qty > 0
+    const ghostItems = discList.filter(d => {
+        const sys = parseFloat(d.systemQty) || 0;
+        const found = parseFloat(d.finalQty) || parseFloat(d.physicalQty) || 0;
+        // Also exclude cases where BOTH are 0 (matched empty)
+        return sys === 0 && found > 0;
+    });
 
-        if (ghostCountEl) ghostCountEl.innerText = `${ghostItems.length} Items`;
+    if (ghostCountEl) ghostCountEl.innerText = `${ghostItems.length} Items`;
 
-        // Store globally for export
-        window.ghostItemsData = ghostItems;
+    // Store globally for filtering
+    window.fullGhostItems = ghostItems;
 
-        // Sort by Found Qty Descending (biggest surprises first)
-        ghostItems.sort((a, b) => (parseFloat(b.finalQty) || 0) - (parseFloat(a.finalQty) || 0));
-
-        if (ghostItems.length === 0) {
-            ghostTable.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">No ghost items found. Great job!</td></tr>';
-        } else {
-            // Limit to top 100 for performance
-            ghostTable.innerHTML = ghostItems.slice(0, 100).map(item => `
-                <tr class="hover:bg-purple-50 transition-colors">
-                    <td class="px-6 py-4 font-medium text-slate-700">${item.location || 'Unknown'}</td>
-                    <td class="px-6 py-4">
-                        <p class="font-semibold text-slate-800">${item.product}</p>
-                        <p class="text-xs text-slate-400 font-mono">${item.productId}</p>
-                    </td>
-                    <td class="px-6 py-4 text-right text-slate-400 font-mono">0</td>
-                    <td class="px-6 py-4 text-right font-bold text-purple-700">+${item.finalQty || item.physicalQty}</td>
-                    <td class="px-6 py-4 text-right">
-                        <button onclick="window.openLocationFilter('${item.location}')" class="text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-2 py-1 rounded shadow-sm">
-                            Inspect Loc.
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
-        }
+    // Populate Ghost Category Filter
+    const ghostCatFilter = document.getElementById('ghostCategoryFilter');
+    if (ghostCatFilter) {
+        const categories = [...new Set(ghostItems.map(d => d.category).filter(Boolean))].sort();
+        const currentVal = ghostCatFilter.value;
+        ghostCatFilter.innerHTML = '<option value="all">All Categories</option>' +
+            categories.map(c => `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`).join('');
     }
+
+    // Initial render of ghost table (respecting current filters if any)
+    window.applyGhostFilters();
 
     discList.forEach(d => {
         const productId = d.productId || 'Unknown';
@@ -705,8 +695,11 @@ async function fetchData() {
     try {
         if (lastUpdateEl) lastUpdateEl.innerText = 'Fetching...';
 
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
         console.log('📡 Fetching from API...');
-        const res = await fetch(`/api/inventory/dashboard?${params}`);
+        const res = await fetch(`/api/inventory/dashboard?${params}`, {
+            headers: { 'Authorization': `Bearer ${userInfo?.token}` }
+        });
 
         if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
 
@@ -770,17 +763,26 @@ function updateDashboard(data) {
     const invGainEl = document.getElementById('invGain');
     const invLossEl = document.getElementById('invLoss');
 
-    // Total Products should show DISTINCT count per user request
+    // Total Products should show BOTH records and DISTINCT count per user request
     const totalProductsEl = document.getElementById('totalProducts');
     const totalPiecesEl = document.getElementById('totalPieces');
-    if (totalProductsEl) totalProductsEl.innerText = data.kpis.totalProducts.toLocaleString();
+    if (totalProductsEl) {
+        totalProductsEl.innerHTML = `${data.kpis.totalRecords.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.totalProducts.toLocaleString()} unique)</span>`;
+    }
     if (totalPiecesEl) totalPiecesEl.innerText = (data.kpis.totalLatestQuantity || 0).toLocaleString();
 
     if (invAccuracyEl) invAccuracyEl.innerText = `${data.kpis.accuracy}%`;
     if (invAccuracyBar) invAccuracyBar.style.width = `${data.kpis.accuracy}%`;
-    if (invMatchedEl) invMatchedEl.innerText = data.kpis.productsStable;
-    if (invGainEl) invGainEl.innerText = data.kpis.productsGain;
-    if (invLossEl) invLossEl.innerText = data.kpis.productsLoss;
+
+    if (invMatchedEl) {
+        invMatchedEl.innerHTML = `${data.kpis.recordsStable.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.productsStable.toLocaleString()} unique)</span>`;
+    }
+    if (invGainEl) {
+        invGainEl.innerHTML = `${data.kpis.recordsGain.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.productsGain.toLocaleString()} unique)</span>`;
+    }
+    if (invLossEl) {
+        invLossEl.innerHTML = `${data.kpis.recordsLoss.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.productsLoss.toLocaleString()} unique)</span>`;
+    }
 
     // Sums
     const invMatchedSumEl = document.getElementById('invMatchedSum');
@@ -1565,24 +1567,43 @@ function updateAuditKPIs(discrepancies) {
     let totalLossItems = 0;
 
     const allLocations = new Set();
-    const matchLocations = new Set();
-    const gainLocations = new Set();
-    const lossLocations = new Set();
+    const locationStatusMap = new Map(); // location -> Set of statuses found
 
     discrepancies.forEach(d => {
-        const status = String(d.locationStatus || '').toLowerCase().trim();
+        const statusStr = String(d.locationStatus || '').toLowerCase().trim();
         const location = d.location || 'Unknown';
         allLocations.add(location);
 
-        if (status.includes('match') || status.includes('مطابق') || status === 'ok') {
+        let normalizedStatus = 'other';
+        if (statusStr.includes('match') || statusStr.includes('مطابق') || statusStr === 'ok') {
             totalMatchItems++;
-            matchLocations.add(location);
-        } else if (status.includes('extra') || status.includes('gain') || status.includes('زيادة') || status === '+') {
+            normalizedStatus = 'match';
+        } else if (statusStr.includes('extra') || statusStr.includes('gain') || statusStr.includes('زيادة') || statusStr === '+') {
             totalGainItems++;
-            gainLocations.add(location);
-        } else if (status.includes('loss') || status.includes('miss') || status.includes('ناقص') || status === '-') {
+            normalizedStatus = 'gain';
+        } else if (statusStr.includes('loss') || statusStr.includes('miss') || statusStr.includes('ناقص') || statusStr === '-') {
             totalLossItems++;
-            lossLocations.add(location);
+            normalizedStatus = 'loss';
+        }
+
+        if (!locationStatusMap.has(location)) {
+            locationStatusMap.set(location, new Set());
+        }
+        locationStatusMap.get(location).add(normalizedStatus);
+    });
+
+    // Mutually exclusive location sets
+    const matchLocationsCount = new Set();
+    const gainLocationsCount = new Set();
+    const lossLocationsCount = new Set();
+
+    locationStatusMap.forEach((statuses, location) => {
+        if (statuses.has('loss')) {
+            lossLocationsCount.add(location);
+        } else if (statuses.has('gain')) {
+            gainLocationsCount.add(location);
+        } else if (statuses.has('match')) {
+            matchLocationsCount.add(location);
         }
     });
 
@@ -1599,9 +1620,9 @@ function updateAuditKPIs(discrepancies) {
     if (barEl) barEl.style.width = `${locationAccuracy}%`;
 
     updateEl('auditTotalLocations', `${totalItems.toLocaleString()} <span class="text-sm text-slate-500">(${allLocations.size} unique)</span>`);
-    updateEl('auditTotalMatch', `${totalMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${matchLocations.size} unique)</span>`);
-    updateEl('auditTotalExtra', `${totalGainItems.toLocaleString()} <span class="text-sm text-slate-500">(${gainLocations.size} unique)</span>`);
-    updateEl('auditTotalLoss', `${totalLossItems.toLocaleString()} <span class="text-sm text-slate-500">(${lossLocations.size} unique)</span>`);
+    updateEl('auditTotalMatch', `${totalMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${matchLocationsCount.size} unique)</span>`);
+    updateEl('auditTotalExtra', `${totalGainItems.toLocaleString()} <span class="text-sm text-slate-500">(${gainLocationsCount.size} unique)</span>`);
+    updateEl('auditTotalLoss', `${totalLossItems.toLocaleString()} <span class="text-sm text-slate-500">(${lossLocationsCount.size} unique)</span>`);
 }
 
 function exportLocationData() {
@@ -1658,12 +1679,89 @@ function exportLocationData() {
 window.exportLocationData = exportLocationData;
 window.updateAuditKPIs = updateAuditKPIs;
 
-function exportGhostData() {
-    const ghostItems = window.ghostItemsData || [];
-    if (ghostItems.length === 0) {
-        alert('No discrepancy data available to export.');
-        return;
+function renderGhostTable(items) {
+    const ghostTable = document.getElementById('ghostTable');
+    if (!ghostTable) return;
+
+    const countDisplay = document.getElementById('ghostResultCount');
+    if (countDisplay) countDisplay.innerText = `Showing ${items.length} rows`;
+
+    // Always sort by Found Qty Descending
+    const sorted = [...items].sort((a, b) => (parseFloat(b.finalQty) || 0) - (parseFloat(a.finalQty) || 0));
+
+    if (sorted.length === 0) {
+        ghostTable.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-slate-400">No matching items found.</td></tr>';
+    } else {
+        // Limit to 200 for performance
+        ghostTable.innerHTML = sorted.slice(0, 200).map(item => `
+            <tr class="hover:bg-purple-50 transition-colors">
+                <td class="px-6 py-4 font-medium text-slate-700">${item.location || 'Unknown'}</td>
+                <td class="px-6 py-4">
+                    <p class="font-semibold text-slate-800">${item.product}</p>
+                    <p class="text-xs text-slate-400 font-mono">${item.productId}</p>
+                </td>
+                <td class="px-6 py-4 text-right text-slate-400 font-mono">0</td>
+                <td class="px-6 py-4 text-right font-bold text-purple-700">+${item.finalQty || item.physicalQty}</td>
+                <td class="px-6 py-4 text-right">
+                    <button onclick="window.openLocationFilter('${item.location}')" class="text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-2 py-1 rounded shadow-sm">
+                        Inspect Loc.
+                    </button>
+                </td>
+            </tr>
+        `).join('');
     }
+}
+
+function applyGhostFilters() {
+    if (!window.fullGhostItems) return;
+
+    const categoryInput = document.getElementById('ghostCategoryFilter');
+    const dateFromInput = document.getElementById('ghostDateFrom');
+    const dateToInput = document.getElementById('ghostDateTo');
+
+    const categoryVal = categoryInput?.value || 'all';
+    const dateFromVal = dateFromInput?.value || '';
+    const dateToVal = dateToInput?.value || '';
+
+    const hasDateFilter = dateFromVal || dateToVal;
+    const startDate = parseInputDate(dateFromVal, false) || new Date(1900, 0, 1);
+    const endDate = parseInputDate(dateToVal, true) || new Date(2099, 11, 31);
+
+    const filtered = window.fullGhostItems.filter(item => {
+        // Category filter
+        const matchesCategory = categoryVal === 'all' || item.category === categoryVal;
+
+        // Date filter
+        let matchesDate = true;
+        if (hasDateFilter) {
+            const recordDate = parseFlexDate(item.dateNow || item.date);
+            matchesDate = recordDate && recordDate >= startDate && recordDate <= endDate;
+        }
+
+        return matchesCategory && matchesDate;
+    });
+
+    // Save for export
+    window.ghostItemsData = filtered;
+    renderGhostTable(filtered);
+}
+
+function clearGhostFilters() {
+    const categoryInput = document.getElementById('ghostCategoryFilter');
+    const dateFromInput = document.getElementById('ghostDateFrom');
+    const dateToInput = document.getElementById('ghostDateTo');
+
+    if (categoryInput) categoryInput.value = 'all';
+    if (dateFromInput) dateFromInput.value = '';
+    if (dateToInput) dateToInput.value = '';
+
+    window.applyGhostFilters();
+}
+
+window.applyGhostFilters = applyGhostFilters;
+window.clearGhostFilters = clearGhostFilters;
+
+function exportGhostData() {
 
     let csvContent = "\uFEFF"; // BOM for Excel UTF-8
     const headers = ["Location", "Product Name", "Product ID", "System Qty", "Found Qty"];

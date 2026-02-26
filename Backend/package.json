@@ -9,16 +9,19 @@
     "dev": "nodemon src/index.js",
     "test:report": "node test-report.js"
   },
-
-  "engines": {"node": "22.15.0"},
-
+  "engines": {
+    "node": "22.15.0"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^17.2.3",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "googleapis": "^171.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.2.2",
     "xlsx": "^0.18.5"
   }
 }

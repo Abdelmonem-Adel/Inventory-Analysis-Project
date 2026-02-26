@@ -253,6 +253,31 @@ export function calculateKPIs(products) {
 
     const uniqueLatestProducts = Array.from(latestProductsMap.values());
 
+    // Status counts for UNIQUE products (based on latest record)
+    uniqueLatestProducts.forEach(p => {
+        let statusRaw = String(p.ProductStatus || '').toLowerCase().trim();
+        let status = statusRaw;
+        if (statusRaw === 'extra') status = 'gain';
+        else if (statusRaw === 'missing') status = 'loss';
+        else if (statusRaw === 'match') status = 'match';
+
+        const isGain = status === 'gain';
+        const isLoss = status === 'loss';
+
+        if (isGain) {
+            increasedCount++;
+        } else if (isLoss) {
+            decreasedCount++;
+        } else {
+            stableCount++;
+        }
+    });
+
+    // Totals for ALL records
+    let recordsGain = 0;
+    let recordsLoss = 0;
+    let recordsMatch = 0;
+
     products.forEach(p => {
         totalQuantity += p.currentQuantity;
 
@@ -265,49 +290,45 @@ export function calculateKPIs(products) {
         const isGain = status === 'gain';
         const isLoss = status === 'loss';
 
-        // دعم جميع الأسماء الممكنة لعمود Final QTY
+        if (isGain) {
+            recordsGain++;
+            sumIncreased += p.PhysicalQty || 0;
+            if (p.lastDiff > 0) {
+                if (p.lastDiff > biggestIncrease.val) {
+                    biggestIncrease = { val: p.lastDiff, product: p.ProductName };
+                }
+            }
+        } else if (isLoss) {
+            recordsLoss++;
+            sumDecreased += p.PhysicalQty || 0;
+            if (p.lastDiff < 0) {
+                if (p.lastDiff < biggestDecrease.val) {
+                    biggestDecrease = { val: p.lastDiff, product: p.ProductName };
+                }
+            }
+        } else {
+            recordsMatch++;
+            sumStable += p.PhysicalQty || 0;
+        }
 
+        // Support multiple Final QTY names if needed for sums
         let finalQty = 0;
         if (p['FinalQTY']) finalQty = parseInt(p['FinalQTY']) || 0;
         else if (p['finalqty']) finalQty = parseInt(p['finalqty']) || 0;
         else if (p['Final QTY']) finalQty = parseInt(p['Final QTY']) || 0;
         else if (p['finalQtyOriginal']) finalQty = parseInt(p['finalQtyOriginal']) || 0;
 
-        // Log للتحقق من القيم
-        console.log(`[KPI DEBUG] Product: ${p.ProductName}, Status: ${status}, FinalQTY: ${finalQty}, Raw:`, {
-            FinalQTY: p['FinalQTY'],
-            finalqty: p['finalqty'],
-            Final_QTY: p['Final QTY'],
-            finalQtyOriginal: p['finalQtyOriginal']
-        });
-
-        if (isGain) {
-            increasedCount++;
-            sumIncreased += finalQty;
-        } else if (isLoss) {
-            decreasedCount++;
-            sumDecreased += finalQty;
-        } else {
-            stableCount++;
-            sumStable += finalQty;
-        }
-
-        if (p.lastDiff > biggestIncrease.val) {
-            biggestIncrease = { val: p.lastDiff, product: p.ProductName };
-        }
-        if (p.lastDiff < biggestDecrease.val) {
-            biggestDecrease = { val: p.lastDiff, product: p.ProductName };
-        }
+        // Note: the individual sum logic above might be redundant if we use totalFinalQty below
     });
 
     const totalDistinct = uniqueLatestProducts.length;
-    const totalRowsCount = products.length; // Keep total rows (audit events) for reference
+    const totalRowsCount = products.length;
 
-    const accuracy = totalRowsCount > 0 ? Math.round((stableCount / totalRowsCount) * 100) : 0;
+    const accuracy = totalRowsCount > 0 ? Math.round((recordsMatch / totalRowsCount) * 100) : 0;
 
-    const percentStable = totalRowsCount > 0 ? Math.round((stableCount / totalRowsCount) * 100) : 0;
-    const percentIncreased = totalRowsCount > 0 ? Math.round((increasedCount / totalRowsCount) * 100) : 0;
-    const percentDecreased = totalRowsCount > 0 ? Math.round((decreasedCount / totalRowsCount) * 100) : 0;
+    const percentStable = totalRowsCount > 0 ? Math.round((recordsMatch / totalRowsCount) * 100) : 0;
+    const percentIncreased = totalRowsCount > 0 ? Math.round((recordsGain / totalRowsCount) * 100) : 0;
+    const percentDecreased = totalRowsCount > 0 ? Math.round((recordsLoss / totalRowsCount) * 100) : 0;
 
     // دعم جميع الأسماء الممكنة لعمود Final QTY في إجمالي القطع
     const totalFinalQty = products.reduce((acc, p) => {
@@ -320,13 +341,18 @@ export function calculateKPIs(products) {
     }, 0);
 
     return {
-        totalProducts: totalDistinct, // DISTINCT count as requested
-        totalLatestQuantity: totalFinalQty, // إجمالي Final QTY لكل المنتجات
-        totalRecords: totalRowsCount,  // RAW row count
-        totalCurrentQuantity: totalFinalQty, // إجمالي Final QTY لكل المنتجات
+        totalProducts: totalDistinct,
+        totalLatestQuantity: totalFinalQty,
+        totalRecords: totalRowsCount,
+        totalCurrentQuantity: totalFinalQty,
+        // Unique Product Counts
         productsGain: increasedCount,
         productsLoss: decreasedCount,
         productsStable: stableCount,
+        // All Record Counts
+        recordsGain: recordsGain,
+        recordsLoss: recordsLoss,
+        recordsStable: recordsMatch,
         sumGain: sumIncreased,
         sumLoss: sumDecreased,
         sumStable,
