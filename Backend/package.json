@@ -17,11 +17,17 @@
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "chart.js": "^4.5.1",
+    "chartjs-node-canvas": "^5.0.0",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "dotenv": "^17.3.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "googleapis": "^171.0.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.2",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.1",
     "xlsx": "^0.18.5"
   }
 }

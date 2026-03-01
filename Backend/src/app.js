@@ -11,8 +11,14 @@ import { protect } from './middleware/authMiddleware.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Import Cron Service
+import { startCronJob } from '../services/cronService.js';
+
 // Connect to Database
 connectDB();
+
+// Start Background Jobs
+startCronJob();
 
 const app = express();
 

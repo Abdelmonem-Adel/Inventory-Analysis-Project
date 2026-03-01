@@ -58,7 +58,7 @@ export function analyzeInventory(data) {
         // Normalize keys once
         const rowKeys = Object.keys(row).map(k => ({
             original: k,
-            normalized: k.toLowerCase().replace(/\s/g, '')
+            normalized: k.toLowerCase().replace(/[^a-z0-9]/gi, '')
         }));
 
         const findVal = (possibleKeys) => {
@@ -99,7 +99,7 @@ export function analyzeInventory(data) {
         const physicalQty = parseFloat(findVal(['finalqty', 'physicalqty', 'physqty', 'countqty', 'actualqty', 'quantity', 'qty', 'count', 'num', 'actual', 'physical', 'counted'])) || 0;
         const status = String(findVal(['productstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus']) || '').toLowerCase();
         const expiryDateStr = findVal(['expirationdate']);
-        const inventoryDateStr = findVal(['inventorydate', 'datenow', 'date', 'invdate', 'countdate', 'datecounted', 'timestamp', 'productiondate']);
+        const inventoryDateStr = findVal(['date', 'inventorydate', 'datenow', 'invdate', 'countdate', 'datecounted', 'timestamp', 'productiondate']);
 
         // Skip rows that don't look like audit records or have junk IDs
         const junkValues = ['0', '(blank)', 'null', 'undefined', '-', 'nan', 'n/a', ''];
@@ -197,7 +197,19 @@ export function analyzeInventory(data) {
             if (expDate && !isNaN(expDate.getTime())) {
                 analysis.expiryProductKeys.add(productKey);
                 // Keep only the numeric date part for stable sorting or comparison later if needed
-                const item = { productId, productName: prod.name, location, expiryDate: expDate.toISOString() };
+                let parsedInvDateStr = 'N/A';
+                const parsedInvDate = parseFlexDate(inventoryDateStr);
+                if (parsedInvDate && !isNaN(parsedInvDate.getTime())) {
+                    parsedInvDateStr = parsedInvDate.toISOString();
+                }
+
+                const item = {
+                    productId,
+                    productName: prod.name,
+                    location,
+                    expiryDate: expDate.toISOString(),
+                    inventoryDate: parsedInvDateStr
+                };
                 if (expDate < now) {
                     analysis.expiryAnalysis.expired.push(item);
                 } else if (expDate <= mid7Days) {
@@ -261,7 +273,9 @@ export function analyzeInventory(data) {
             const barcode = findVal(['barcode', 'ean', 'upc']);
             const itemId = findVal(['itemid', 'productid', 'sku', 'id']);
             const lotSerial = findVal(['lotserialnumber', 'lotserial', 'lot', 'serial', 'batch']);
-            const productionDate = findVal(['productiondate', 'proddate', 'mfgdate', 'manufactured']);
+            const productionDateRaw = findVal(['productiondate']);
+            const expirationDateRaw = findVal(['expirationdate']);
+
             const firstQty = findVal(['firstqty', 'initialqty', 'startqty']);
             const finalQty = findVal(['finalqty', 'endqty', 'closingqty']);
             const firstVar = findVal(['firstvar', 'initialvar', 'startvar', 'variance1']);
@@ -270,10 +284,16 @@ export function analyzeInventory(data) {
             const lotStatus = findVal(['lotstatus', 'batchstatus']);
             const productStatus = findVal(['productstatus', 'itemstatus']);
             const createdBy = findVal(['creaitedby', 'createdby', 'ceraitedby', 'addedby']);
-            const employeeAccuracy = findVal(['employeeaccuracy', 'employeestatus', 'staffaccuracy', 'workeraccuracy']);
+            const employeeAccuracyRaw = findVal(['employeeaccuracy']);
             const employeeStatus = findVal(['employeestatus', 'empstatus', 'staffstatus']);
-            const live = findVal(['live', 'active', 'status']);
-            const liveWait = findVal(['livewait', 'waittime', 'pending']);
+            const liveRaw = findVal(['live']);
+            const liveWaitRaw = findVal(['livewait']);
+
+            const formatDate = (val) => {
+                if (!val) return 'N/A';
+                const d = parseFlexDate(val);
+                return d && !isNaN(d.getTime()) ? d.toLocaleDateString() : val;
+            };
 
             analysis.discrepancies.push({
                 // Core identification
@@ -285,8 +305,8 @@ export function analyzeInventory(data) {
 
                 // Lot & Dates
                 lotSerial: lotSerial || 'N/A',
-                productionDate: productionDate || 'N/A',
-                expirationDate: expiryDateStr || 'N/A',
+                productionDate: formatDate(productionDateRaw),
+                expirationDate: formatDate(expirationDateRaw),
 
                 // Quantities
                 firstQty: firstQty || 'N/A',
@@ -306,11 +326,11 @@ export function analyzeInventory(data) {
                 createdBy: createdBy || 'N/A',
                 staffName,
                 staffEvaluation: staffStatus,
-                employeeAccuracy: employeeAccuracy || 'N/A',
+                employeeAccuracy: (employeeAccuracyRaw !== null && employeeAccuracyRaw !== undefined && employeeAccuracyRaw !== '') ? employeeAccuracyRaw : 'N/A',
                 employeeStatus: employeeStatus || 'N/A',
 
                 // Live Status
-                live: live || 'N/A',
+                live: (liveRaw !== null && liveRaw !== undefined && liveRaw !== '') ? liveRaw : 'N/A',
                 dateNow: inventoryDateStr && parseFlexDate(inventoryDateStr)
                     ? (() => {
                         const d = parseFlexDate(inventoryDateStr);
@@ -319,7 +339,7 @@ export function analyzeInventory(data) {
                         return `${day}/${month}/${d.getFullYear()}`;
                     })()
                     : (inventoryDateStr || 'N/A'),
-                liveWait: liveWait || 'N/A'
+                liveWait: (liveWaitRaw !== null && liveWaitRaw !== undefined && liveWaitRaw !== '') ? liveWaitRaw : 'N/A'
             });
         }
     });

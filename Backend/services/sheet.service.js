@@ -124,3 +124,8 @@ export async function listSheetTitles(spreadsheetId = process.env.SPREADSHEET_ID
   const metadata = await sheets.spreadsheets.get({ spreadsheetId });
   return metadata.data.sheets.map(s => s.properties.title);
 }
+
+export function clearCache() {
+  sheetCache.clear();
+  console.log('[sheet.service] Cache cleared.');
+}
