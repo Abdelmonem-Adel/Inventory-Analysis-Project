@@ -391,20 +391,6 @@ window.clearProductivityFilters = function () {
 };
 
 function updateAuditDashboard(data) {
-    // Alerts
-    const alertsDiv = document.getElementById('auditAlerts');
-    alertsDiv.innerHTML = data.alerts.map(a => `
-        <div class="p-4 rounded-lg flex items-center justify-between ${a.type === 'critical' ? 'bg-red-50 text-red-800 border-l-4 border-red-600' : 'bg-orange-50 text-orange-800 border-l-4 border-orange-600'}">
-            <div class="flex items-center">
-                <svg class="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"/></svg>
-                <div>
-                    <p class="font-bold text-sm">${a.message}</p>
-                    <p class="text-xs opacity-75">Recommended Action: ${a.action}</p>
-                </div>
-            </div>
-        </div>
-    `).join('');
-
     // Calculate Location-based KPIs from discrepancies
     const discrepancies = data.discrepanciesArr || [];
     window.updateAuditKPIs(discrepancies);
@@ -661,10 +647,8 @@ function renderDiscrepancyTable(discrepancies) {
             <td class="px-3 py-3 font-bold text-slate-800">${d.product}</td>
             <td class="px-3 py-3 text-slate-500">${d.productionDate}</td>
             <td class="px-3 py-3 text-right text-slate-500">${d.expirationDate}</td>
-            <td class="px-3 py-3 text-right text-slate-500">${d.firstQty}</td>
             <td class="px-3 py-3 text-right text-slate-500">${d.finalQty}</td>
             <td class="px-3 py-3 text-right font-bold text-slate-800">${d.systemQty}</td>
-            <td class="px-3 py-3 text-right text-slate-600">${d.firstVar}</td>
             <td class="px-3 py-3 text-right text-slate-600">${d.finalVar}</td>
             <td class="px-3 py-3"><span class="text-[10px] px-2 py-1 bg-slate-50 border rounded-md text-slate-600">${d.locationStatus}</span></td>
             <td class="px-3 py-3 whitespace-normal min-w-[120px]">
@@ -673,7 +657,7 @@ function renderDiscrepancyTable(discrepancies) {
                 </span>
             </td>
             <td class="px-3 py-3 font-medium text-slate-800">${d.staffName}</td>
-            <td class="px-3 py-3 text-center text-slate-400">${d.employeeStatus || d.employeeAccuracy}</td>
+            <td class="px-3 py-3 text-center text-slate-400">${d.employeeAccuracy}</td>
             <td class="px-3 py-3 text-slate-400 text-[10px]">${d.live}</td>
 
             <td class="px-3 py-3 text-slate-400 text-[10px]">${d.liveWait}</td>
@@ -767,7 +751,7 @@ function updateDashboard(data) {
     const totalProductsEl = document.getElementById('totalProducts');
     const totalPiecesEl = document.getElementById('totalPieces');
     if (totalProductsEl) {
-        totalProductsEl.innerHTML = `${data.kpis.totalRecords.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.totalProducts.toLocaleString()} unique)</span>`;
+        totalProductsEl.innerHTML = `${data.kpis.totalProducts.toLocaleString()}`;
     }
     if (totalPiecesEl) totalPiecesEl.innerText = (data.kpis.totalLatestQuantity || 0).toLocaleString();
 
@@ -775,13 +759,13 @@ function updateDashboard(data) {
     if (invAccuracyBar) invAccuracyBar.style.width = `${data.kpis.accuracy}%`;
 
     if (invMatchedEl) {
-        invMatchedEl.innerHTML = `${data.kpis.recordsStable.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.productsStable.toLocaleString()} unique)</span>`;
+        invMatchedEl.innerHTML = `${data.kpis.productsStable.toLocaleString()}`;
     }
     if (invGainEl) {
-        invGainEl.innerHTML = `${data.kpis.recordsGain.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.productsGain.toLocaleString()} unique)</span>`;
+        invGainEl.innerHTML = `${data.kpis.productsGain.toLocaleString()}`;
     }
     if (invLossEl) {
-        invLossEl.innerHTML = `${data.kpis.recordsLoss.toLocaleString()} <span class="text-sm text-slate-500">(${data.kpis.productsLoss.toLocaleString()} unique)</span>`;
+        invLossEl.innerHTML = `${data.kpis.productsLoss.toLocaleString()}`;
     }
 
     // Sums
@@ -893,40 +877,86 @@ function updateDashboard(data) {
         updateCategoryChart(data.products);
     }
 
-    // Render Expiry Table (From Sheet 1)
-    const expiryTbody = document.getElementById('expiryTable');
-    if (expiryTbody && data.expiryAnalysis) {
+    // Render Expiry Table
+    if (data.expiryAnalysis) {
         // Concatenate Expired + 7 Days + 30 Days arrays to cover all critical items
         const expiryRows = (data.expiryAnalysis.expired || [])
             .concat(data.expiryAnalysis.expiring7Days || [])
             .concat(data.expiryAnalysis.expiring30Days || []);
 
-        // Sort by date ascending (closest to expire/expired first)
-        expiryRows.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
-
-        const countEl = document.getElementById('expiryCount');
-        if (countEl) countEl.innerText = `${expiryRows.length} Items`;
-
-        if (expiryRows.length === 0) {
-            expiryTbody.innerHTML = '<tr><td colspan="3" class="px-6 py-4 text-center text-slate-400">No critical expiry alerts found.</td></tr>';
-        } else {
-            expiryTbody.innerHTML = expiryRows.map(item => `
-                <tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-6 py-4">
-                        <p class="font-semibold text-slate-800">${item.productName}</p>
-                        <p class="text-xs text-slate-400 font-mono">${item.productId}</p>
-                    </td>
-                    <td class="px-6 py-4 text-slate-600">${item.location || item.warehouse || 'Main'}</td>
-                    <td class="px-6 py-4 text-right font-bold ${new Date(item.expiryDate) < new Date() ? 'text-red-600' : 'text-orange-600'}">
-                        ${new Date(item.expiryDate).toLocaleDateString()}
-                    </td>
-                </tr>
-            `).join('');
-        }
+        window.allExpiryRows = expiryRows;
+        window.renderExpiryTable();
     }
 
     console.log('✨ updateDashboard complete');
 }
+
+function renderExpiryTable(rowsToRender = window.allExpiryRows) {
+    const expiryTbody = document.getElementById('expiryTable');
+    if (!expiryTbody || !rowsToRender) return;
+
+    // Sort by expiry date ascending (closest to expire/expired first)
+    const sortedRows = [...rowsToRender].sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+    const countEl = document.getElementById('expiryCount');
+    if (countEl) countEl.innerText = `${sortedRows.length} Items`;
+
+    if (sortedRows.length === 0) {
+        expiryTbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">No critical expiry alerts found matching filters.</td></tr>';
+    } else {
+        expiryTbody.innerHTML = sortedRows.map(item => `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-6 py-4">
+                    <p class="font-semibold text-slate-800">${item.productName}</p>
+                    <p class="text-xs text-slate-400 font-mono">${item.productId}</p>
+                </td>
+                <td class="px-6 py-4 text-slate-600">${item.location || item.warehouse || 'Main'}</td>
+                <td class="px-6 py-4 text-slate-600 font-medium">
+                    ${item.inventoryDate && item.inventoryDate !== 'N/A' ? new Date(item.inventoryDate).toLocaleDateString() : 'N/A'}
+                </td>
+                <td class="px-6 py-4 text-right font-bold ${new Date(item.expiryDate) < new Date() ? 'text-red-600' : 'text-orange-600'}">
+                    ${new Date(item.expiryDate).toLocaleDateString()}
+                </td>
+            </tr>
+        `).join('');
+    }
+}
+
+window.applyExpiryFilters = function () {
+    if (!window.allExpiryRows) return;
+
+    const dateFromVal = document.getElementById('expiryDateFrom').value;
+    const dateToVal = document.getElementById('expiryDateTo').value;
+
+    const dateFrom = dateFromVal ? new Date(dateFromVal) : null;
+    if (dateFrom) dateFrom.setHours(0, 0, 0, 0);
+
+    const dateTo = dateToVal ? new Date(dateToVal) : null;
+    if (dateTo) dateTo.setHours(23, 59, 59, 999);
+
+    const filtered = window.allExpiryRows.filter(row => {
+        if (!dateFrom && !dateTo) return true;
+
+        const rowDateParsed = parseFlexDate(row.inventoryDate);
+        if (!rowDateParsed) return false; // Exclude items with invalid/no inventory date if filtering by date
+
+        if (dateFrom && rowDateParsed < dateFrom) return false;
+        if (dateTo && rowDateParsed > dateTo) return false;
+
+        return true;
+    });
+
+    renderExpiryTable(filtered);
+};
+
+window.clearExpiryFilters = function () {
+    document.getElementById('expiryDateFrom').value = '';
+    document.getElementById('expiryDateTo').value = '';
+
+    if (window.allExpiryRows) {
+        renderExpiryTable(window.allExpiryRows);
+    }
+};
 
 function updateCategoryChart(products) {
     console.log('📈 updateCategoryChart called', { productsCount: products?.length });
@@ -1501,7 +1531,7 @@ function updateAuditStatusChart(discrepancies) {
     let lossCount = 0;
 
     discrepancies.forEach(d => {
-        const status = String(d.locationStatus || '').toLowerCase().trim();
+        const status = String(d.locationStatus || d.itemstatus || '').toLowerCase().trim();
         const qty = parseFloat(d.finalQty) || parseFloat(d.physicalQty) || 0;
 
         if (status.includes('match') || status.includes('مطابق') || status === 'ok') {
@@ -1523,18 +1553,26 @@ function updateAuditStatusChart(discrepancies) {
     const gainPctRaw = totalLocCount > 0 ? (gainCount / totalLocCount) * 100 : 0;
     const lossPctRaw = totalLocCount > 0 ? (lossCount / totalLocCount) * 100 : 0;
 
+    // Combined "Miss Match" Values
+    const missMatchCount = gainCount + lossCount;
+    const missMatchQtySum = gainQtySum + lossQtySum;
+    const missMatchPctRaw = gainPctRaw + lossPctRaw;
+
     // Update Counters
     const updateEl = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.innerText = val;
     };
+    
+    // Total Match
     updateEl('auditMatchedCount', matchQtySum.toLocaleString());
-    updateEl('auditGainCount', gainQtySum.toLocaleString());
-    updateEl('auditLossCount', lossQtySum.toLocaleString());
-    updateEl('auditTotalPiecesCount', totalQtySum.toLocaleString());
     updateEl('auditMatchedPercentage', `${matchPctRaw.toFixed(1)}%`);
-    updateEl('auditGainPercentage', `${gainPctRaw.toFixed(1)}%`);
-    updateEl('auditLossPercentage', `${lossPctRaw.toFixed(1)}%`);
+
+    // Combined Miss Match (Extra + Loss)
+    updateEl('auditMissMatchCount', missMatchQtySum.toLocaleString());
+    updateEl('auditMissMatchPercentage', `${missMatchPctRaw.toFixed(1)}%`);
+
+    updateEl('auditTotalPiecesCount', totalQtySum.toLocaleString());
 
     const distCanvas = document.getElementById('statusDistChart');
     if (!distCanvas) return;
@@ -1594,19 +1632,17 @@ function updateAuditKPIs(discrepancies) {
 
     // Mutually exclusive location sets
     const matchLocationsCount = new Set();
-    const gainLocationsCount = new Set();
-    const lossLocationsCount = new Set();
+    const missMatchLocationsCount = new Set(); // Combined Gain/Loss
 
     locationStatusMap.forEach((statuses, location) => {
-        if (statuses.has('loss')) {
-            lossLocationsCount.add(location);
-        } else if (statuses.has('gain')) {
-            gainLocationsCount.add(location);
+        if (statuses.has('loss') || statuses.has('gain')) {
+            missMatchLocationsCount.add(location);
         } else if (statuses.has('match')) {
             matchLocationsCount.add(location);
         }
     });
 
+    const totalMissMatchItems = totalGainItems + totalLossItems;
     const locationAccuracy = totalItems > 0 ? (totalMatchItems / totalItems) * 100 : 0;
 
     const updateEl = (id, html) => {
@@ -1621,8 +1657,9 @@ function updateAuditKPIs(discrepancies) {
 
     updateEl('auditTotalLocations', `${totalItems.toLocaleString()} <span class="text-sm text-slate-500">(${allLocations.size} unique)</span>`);
     updateEl('auditTotalMatch', `${totalMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${matchLocationsCount.size} unique)</span>`);
-    updateEl('auditTotalExtra', `${totalGainItems.toLocaleString()} <span class="text-sm text-slate-500">(${gainLocationsCount.size} unique)</span>`);
-    updateEl('auditTotalLoss', `${totalLossItems.toLocaleString()} <span class="text-sm text-slate-500">(${lossLocationsCount.size} unique)</span>`);
+    
+    // Combined "Miss Match" KPI (Total Extra + Total Loss)
+    updateEl('auditTotalMissMatch', `${totalMissMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${missMatchLocationsCount.size} unique)</span>`);
 }
 
 function exportLocationData() {
