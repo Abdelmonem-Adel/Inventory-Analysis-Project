@@ -11,6 +11,28 @@ const excelSerialToDate = (serial) => {
 };
 
 /**
+ * Reads all data from the 'Items' Google Sheet without filtering by date.
+ * Useful for scanning overall expiry status regardless of when they were added.
+ * 
+ * @returns {Promise<Array<Object>|null>} Array of row objects or null if no data
+ */
+export const getAllScans = async () => {
+    try {
+        clearCache();
+        const sheetData = await readSheet(process.env.SPREADSHEET_ID, 'Scans');
+        if (!sheetData || sheetData.length === 0) {
+            console.log("[excelService] No data found in 'Scans' sheet.");
+            return null;
+        }
+        console.log(`[excelService] Fetched ${sheetData.length} rows from 'Scans' sheet for expiry analysis.`);
+        return sheetData;
+    } catch (error) {
+        console.error(`[excelService] Error reading Scans sheet from Google Sheet:`, error.message);
+        throw error;
+    }
+};
+
+/**
  * Reads data from the 'Items' Google Sheet and filters rows matching today's date.
  * Relies on the 'date' column in the 'Items' sheet.
  * 

@@ -91,28 +91,26 @@ function showView(viewId) {
 
 async function fetchSmartAnalysis() {
     try {
-        document.getElementById('lastUpdate').innerText = 'Analyzing Audit...';
+        document.getElementById('lastUpdate').innerText = 'Analyzing Locations...';
         const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-        const res = await fetch('/api/inventory/analysis', {
+        const res = await fetch('/api/inventory/location-analysis', {
             headers: { 'Authorization': `Bearer ${userInfo?.token}` }
         });
         const data = await res.json();
 
         if (data.error) {
-            console.warn("Audit API returned an error:", data.error);
+            console.warn("Location API returned an error:", data.error);
             document.getElementById('lastUpdate').innerText = 'Notice: ' + data.error;
-            updateAuditDashboard(data);
             return;
         }
 
-        auditDiscrepancies = data.discrepanciesArr || [];
-        updateAuditDashboard(data);
-        setupAuditFilters();
-        setupLocationFilters(); // Initialize location view filters and export button
-        document.getElementById('lastUpdate').innerText = 'Audit Updated: ' + new Date().toLocaleTimeString();
+        updateLocationDashboard(data);
+        setupLocationFilters();
+        fetchScansRawData();
+        document.getElementById('lastUpdate').innerText = 'Location Updated: ' + new Date().toLocaleTimeString();
     } catch (err) {
-        console.error("Audit Fetch error:", err);
-        document.getElementById('lastUpdate').innerText = 'Audit Error';
+        console.error("Location Fetch error:", err);
+        document.getElementById('lastUpdate').innerText = 'Location Error';
     }
 }
 
@@ -390,169 +388,261 @@ window.clearProductivityFilters = function () {
     window.applyProductivityFilters();
 };
 
-function updateAuditDashboard(data) {
-    // Calculate Location-based KPIs from discrepancies
-    const discrepancies = data.discrepanciesArr || [];
-    window.updateAuditKPIs(discrepancies);
+function updateLocationDashboard(data) {
+    const products = data.products || [];
+    const kpis = data.kpis || {};
 
-
-
-
-    // Items with their Locations Table
-    const locationTable = document.getElementById('locationDetailsTable');
-    const discList = data.discrepanciesArr || [];
-
-    // Save data in global variable including discrepancies for each product
+    // Store globally for filters
+    window.locationTableFullData = products;
     window.productLocationsData = {};
-    window.locationTableFullData = [];
 
-    // Build full data with match/notmatch counts
-    Object.entries(data.productReport || {}).forEach(([productId, prod]) => {
-        const productDisc = discList.filter(d =>
-            String(d.productId || '').toLowerCase() === String(prod.itemId || productId || '').toLowerCase()
-        );
-
-        let matchCount = 0;
-        let notMatchCount = 0;
-        let latestDate = null;
-
-        productDisc.forEach(d => {
-            const status = String(d.locationStatus || '').toLowerCase();
-            if (status.includes('match') && !status.includes('not') || status.includes('مطابق')) {
-                matchCount++;
-            } else if (status.includes('extra') || status.includes('loss') || status.includes('زيادة') || status.includes('نقص')) {
-                notMatchCount++;
-            }
-            // Parse date
-            const recordDate = parseFlexDate(d.dateNow);
-            if (recordDate && (!latestDate || recordDate > latestDate)) {
-                latestDate = recordDate;
-            }
-        });
-
-        window.productLocationsData[productId] = {
-            name: prod.name,
-            locations: prod.locations,
-            details: productDisc.map(d => ({
-                location: d.location,
-                finalQty: d.finalQty || d.physicalQty || 0,
-                sysQty: d.systemQty || 0,
-                locationStatus: d.locationStatus || 'N/A',
-                dateNow: d.dateNow
-            }))
+    // Build productLocationsData for modal
+    products.forEach(p => {
+        window.productLocationsData[p.itemId] = {
+            name: p.name,
+            category: p.category,
+            physicalLocations: p.physicalLocations,
+            systemLocations: p.systemLocations,
+            locationStatus: p.locationStatus,
+            physicalDetails: p.physicalDetails || [],
+            systemDetails: p.systemDetails || []
         };
-
-        window.locationTableFullData.push({
-            productId,
-            name: prod.name,
-            itemId: prod.itemId || productId,
-            category: productDisc.length > 0 ? productDisc[0].category : 'General',
-            locations: prod.locations,
-            locationsCount: prod.locations.length,
-            matchCount,
-            notMatchCount,
-            latestDate,
-            discrepancies: productDisc
-        });
     });
 
-    // Initial render with default sort
-    renderLocationTable(window.locationTableFullData, 'locations');
+    // Update KPIs
+    const updateEl = (id, html) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = html;
+    };
 
-    // Setup location filters
-    setupLocationFilters();
+    updateEl('locTotalProducts', `${kpis.totalProducts || 0}`);
+    updateEl('locTotalLocations', `${kpis.totalLocations || 0} <span class="text-sm text-slate-500">(${kpis.uniqueLocationsAll || 0} unique)</span>`);
+    updateEl('locPhysicalLocations', `${kpis.totalPhysicalLocations || 0} <span class="text-sm text-slate-500">(${kpis.uniquePhysicalLocations || 0} unique)</span>`);
+    updateEl('locSystemLocations', `${kpis.totalSystemLocations || 0} <span class="text-sm text-slate-500">(${kpis.uniqueSystemLocations || 0} unique)</span>`);
 
-    // Status Distribution Chart
-    window.updateAuditStatusChart(discrepancies);
+    const locMatch = kpis.locMatchCount || 0;
+    const locMissMatch = kpis.locMissMatchCount || 0;
+    const totalUniqueLocs = kpis.uniqueLocationsAll || 0;
+    const locMatchPct = totalUniqueLocs > 0 ? Math.round((locMatch / totalUniqueLocs) * 100) : 0;
+    const locMissMatchPct = totalUniqueLocs > 0 ? Math.round((locMissMatch / totalUniqueLocs) * 100) : 0;
+    updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${totalUniqueLocs}</span>`);
+    updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${locMatchPct}%</span>`);
+    updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${totalUniqueLocs}</span>`);
+    updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${locMissMatchPct}%</span>`);
 
-    // Expiry Table moved to updateDashboard
-
-    // Top 5 Items with Most Not Match Locations (Extra or Loss)
-    const problematicDiv = document.getElementById('problematicList');
-    const itemNotMatchCounts = {};
-
-    // Ghost Items (System Qty 0 but Found > 0)
-    const ghostCountEl = document.getElementById('ghostCount');
-
-    // Filter logic: System Qty is 0 (or implies 0) AND Found Qty > 0
-    const ghostItems = discList.filter(d => {
-        const sys = parseFloat(d.systemQty) || 0;
-        const found = parseFloat(d.finalQty) || parseFloat(d.physicalQty) || 0;
-        // Also exclude cases where BOTH are 0 (matched empty)
-        return sys === 0 && found > 0;
-    });
-
-    if (ghostCountEl) ghostCountEl.innerText = `${ghostItems.length} Items`;
-
-    // Store globally for filtering
-    window.fullGhostItems = ghostItems;
-
-    // Populate Ghost Category Filter
-    const ghostCatFilter = document.getElementById('ghostCategoryFilter');
-    if (ghostCatFilter) {
-        const categories = [...new Set(ghostItems.map(d => d.category).filter(Boolean))].sort();
-        const currentVal = ghostCatFilter.value;
-        ghostCatFilter.innerHTML = '<option value="all">All Categories</option>' +
-            categories.map(c => `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}</option>`).join('');
-    }
-
-    // Initial render of ghost table (respecting current filters if any)
-    window.applyGhostFilters();
-
-    discList.forEach(d => {
-        const productId = d.productId || 'Unknown';
-        const productName = d.product || productId;
-        const status = String(d.locationStatus || '').toLowerCase();
-        const isNotMatch = status.includes('extra') || status.includes('loss') || status.includes('زيادة') || status.includes('نقص');
-
-        if (!itemNotMatchCounts[productId]) {
-            itemNotMatchCounts[productId] = { name: productName, extra: 0, loss: 0, total: 0 };
-        }
-
-        if (isNotMatch) {
-            itemNotMatchCounts[productId].total++;
-            if (status.includes('extra') || status.includes('زيادة')) {
-                itemNotMatchCounts[productId].extra++;
-            } else if (status.includes('loss') || status.includes('نقص')) {
-                itemNotMatchCounts[productId].loss++;
-            }
+    // Units KPIs (initial load)
+    let matchUnits = 0, missMatchUnits = 0;
+    products.forEach(p => {
+        const totalFinalQty = (p.physicalDetails || []).reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
+        const totalSysQty = (p.systemDetails || []).reduce((s, d) => s + (parseFloat(d.quantity) || 0), 0);
+        if (totalFinalQty === totalSysQty) {
+            matchUnits += totalFinalQty;
+        } else {
+            missMatchUnits += Math.abs(totalFinalQty - totalSysQty);
         }
     });
+    const totalUnits = matchUnits + missMatchUnits;
+    const matchUnitsPct = totalUnits > 0 ? Math.round((matchUnits / totalUnits) * 100) : 0;
+    const missMatchUnitsPct = totalUnits > 0 ? Math.round((missMatchUnits / totalUnits) * 100) : 0;
+    updateEl('locMatchUnits', `${matchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
+    updateEl('locMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${matchUnitsPct}%</span>`);
+    updateEl('locMissMatchUnits', `${missMatchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
+    updateEl('locMissMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${missMatchUnitsPct}%</span>`);
 
-    const topNotMatchItems = Object.entries(itemNotMatchCounts)
-        .filter(([id, counts]) => counts.total > 0)
-        .sort((a, b) => b[1].total - a[1].total)
+    // Render main table
+    renderLocationTable(products, 'physicalDesc');
+
+    // Status Distribution Chart (location-based)
+    updateLocationStatusChart({
+        matchCount: kpis.locMatchCount || 0,
+        missMatchCount: kpis.locMissMatchCount || 0
+    });
+
+    // Top 5 Miss Match Items (most location differences)
+    const topMissMatchDiv = document.getElementById('topMissMatchList');
+    const missMatchItems = products.filter(p => p.locationStatus !== 'match')
+        .map(item => {
+            const physSet = new Set((item.physicalDetails || []).map(d => d.location));
+            const sysSet = new Set((item.systemDetails || []).map(d => d.location));
+            const physOnly = [...physSet].filter(l => !sysSet.has(l)).length;
+            const sysOnly = [...sysSet].filter(l => !physSet.has(l)).length;
+            return { ...item, diffCount: physOnly + sysOnly };
+        })
+        .sort((a, b) => b.diffCount - a.diffCount)
         .slice(0, 5);
 
-    if (topNotMatchItems.length > 0) {
-        problematicDiv.innerHTML = topNotMatchItems.map(([id, counts], index) => `
-            <div class="p-3 bg-red-50 border border-red-100 rounded-lg">
+    if (missMatchItems.length > 0) {
+        topMissMatchDiv.innerHTML = missMatchItems.map((item, i) => `
+            <div class="p-3 bg-orange-50 border border-orange-100 rounded-lg">
                 <div class="flex items-start mb-2">
-                    <div class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center mr-3 font-bold text-sm flex-shrink-0">${index + 1}</div>
+                    <div class="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center mr-3 font-bold text-sm flex-shrink-0">${i + 1}</div>
                     <div>
-                        <p class="text-sm font-medium text-slate-700">${counts.name}</p>
-                        <p class="text-xs text-slate-400 font-mono">${id}</p>
+                        <p class="text-sm font-medium text-slate-700">${item.name}</p>
+                        <p class="text-xs text-slate-400 font-mono">${item.itemId}</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 ml-11">
-                    <span class="px-2 py-1 text-xs font-bold text-orange-700 bg-orange-100 rounded">Gain: ${counts.extra}</span>
-                    <span class="px-2 py-1 text-xs font-bold text-red-700 bg-red-100 rounded">Loss: ${counts.loss}</span>
-                    <span class="px-2 py-1 text-xs font-bold text-white bg-red-600 rounded">Total: ${counts.total}</span>
+                <div class="flex items-center gap-2 ml-11 flex-wrap">
+                    <span class="px-2 py-1 text-xs font-bold text-cyan-700 bg-cyan-100 rounded">Physical: ${item.physicalLocations}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-purple-700 bg-purple-100 rounded">System: ${item.systemLocations}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-white bg-orange-500 rounded">Diff: ${item.diffCount}</span>
                 </div>
             </div>
         `).join('');
     } else {
-        problematicDiv.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No discrepancy items found.</p>';
+        topMissMatchDiv.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">No miss match items found.</p>';
     }
 
-    // Staff Performance Table
-    window.staffFullData = data.staffReport;
-    window.discrepanciesFullData = data.discrepanciesArr;
+    // Discrepancy Locations Putaway (System Qty=0, Physical>0)
+    // Build putaway data: for each product, find locations where physical qty > 0 and system qty = 0
+    const putawayRows = [];
+    products.forEach(product => {
+        const physicalLocs = product.physicalDetails || [];
+        const systemLocs = product.systemDetails || [];
 
-    renderStaffTable(data.staffReport);
+        // Build system qty map per location for this product
+        const sysQtyMap = {};
+        systemLocs.forEach(d => {
+            const loc = d.location;
+            sysQtyMap[loc] = (sysQtyMap[loc] || 0) + (d.quantity || 0);
+        });
 
-    // Render Discrepancy Table Initial
-    renderDiscrepancyTable(data.discrepanciesArr);
+        // Group physical by location
+        const physByLoc = {};
+        physicalLocs.forEach(d => {
+            const loc = d.location;
+            if (!physByLoc[loc]) physByLoc[loc] = { totalQty: 0, dates: [] };
+            physByLoc[loc].totalQty += (d.finalQty || 0);
+            if (d.date) physByLoc[loc].dates.push(d.date);
+        });
+
+        Object.entries(physByLoc).forEach(([loc, info]) => {
+            const sysQty = sysQtyMap[loc] || 0;
+            if (sysQty === 0 && info.totalQty > 0) {
+                // Latest date for this location
+                let latestDate = null;
+                info.dates.forEach(dateStr => {
+                    const dt = new Date(dateStr);
+                    if (!latestDate || dt > latestDate) latestDate = dt;
+                });
+                putawayRows.push({
+                    name: product.name,
+                    itemId: product.itemId,
+                    category: product.category,
+                    location: loc,
+                    physicalQty: info.totalQty,
+                    date: latestDate
+                });
+            }
+        });
+    });
+
+    // Store globally for filtering
+    window.putawayFullData = putawayRows;
+
+    // Populate putaway category filter
+    const putawayCatFilter = document.getElementById('putawayCategoryFilter');
+    if (putawayCatFilter) {
+        const cats = [...new Set(putawayRows.map(r => r.category))].filter(Boolean).sort();
+        putawayCatFilter.innerHTML = '<option value="all">All Categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+    }
+
+    // Render putaway table
+    renderPutawayTable(putawayRows);
+
+    // Setup putaway filters
+    const applyPutawayBtn = document.getElementById('applyPutawayFilter');
+    if (applyPutawayBtn) {
+        applyPutawayBtn.addEventListener('click', () => {
+            const catVal = document.getElementById('putawayCategoryFilter')?.value || 'all';
+            const dateFrom = document.getElementById('putawayDateFrom')?.value;
+            const dateTo = document.getElementById('putawayDateTo')?.value;
+
+            let filtered = window.putawayFullData;
+            if (catVal !== 'all') {
+                filtered = filtered.filter(r => r.category === catVal);
+            }
+            if (dateFrom) {
+                const from = new Date(dateFrom);
+                from.setHours(0, 0, 0, 0);
+                filtered = filtered.filter(r => r.date && r.date >= from);
+            }
+            if (dateTo) {
+                const to = new Date(dateTo);
+                to.setHours(23, 59, 59, 999);
+                filtered = filtered.filter(r => r.date && r.date <= to);
+            }
+            renderPutawayTable(filtered);
+        });
+    }
+}
+
+function exportPutawayExcel() {
+    const rows = window.putawayFilteredData || window.putawayFullData || [];
+    if (rows.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+
+    // BOM for UTF-8
+    const BOM = '\uFEFF';
+    const headers = ['Product Name', 'Item ID', 'Category', 'Location', 'Physical Qty', 'Date'];
+    const csvRows = [headers.join(',')];
+
+    rows.forEach(row => {
+        const dateDisplay = row.date ? row.date.toLocaleDateString('en-GB') : '';
+        csvRows.push([
+            `"${(row.name || '').replace(/"/g, '""')}"`,
+            `"${row.itemId || ''}"`,
+            `"${(row.category || '').replace(/"/g, '""')}"`,
+            `"${(row.location || '').replace(/"/g, '""')}"`,
+            row.physicalQty || 0,
+            dateDisplay
+        ].join(','));
+    });
+
+    const blob = new Blob([BOM + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Discrepancy_Putaway_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function renderPutawayTable(rows) {
+    // Store filtered data for export
+    window.putawayFilteredData = rows;
+    const tbody = document.getElementById('putawayTableBody');
+    const emptyMsg = document.getElementById('putawayEmpty');
+    if (!tbody) return;
+
+    if (rows.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyMsg) emptyMsg.classList.remove('hidden');
+        return;
+    }
+    if (emptyMsg) emptyMsg.classList.add('hidden');
+
+    // Sort by physical qty descending
+    const sorted = [...rows].sort((a, b) => b.physicalQty - a.physicalQty);
+
+    tbody.innerHTML = sorted.map(row => {
+        const dateDisplay = row.date ? row.date.toLocaleDateString('en-GB') : '-';
+        return `
+            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                <td class="py-2 pr-2">
+                    <p class="text-sm font-medium text-slate-700 truncate max-w-[140px]" title="${row.name}">${row.name}</p>
+                    <p class="text-xs text-slate-400 font-mono">${row.itemId}</p>
+                </td>
+                <td class="py-2 pr-2 text-sm text-slate-600">${row.location}</td>
+                <td class="py-2 pr-2 text-center">
+                    <span class="px-2 py-0.5 text-xs font-bold bg-orange-100 text-orange-700 rounded">${row.physicalQty}</span>
+                </td>
+                <td class="py-2 text-center text-xs text-slate-500">${dateDisplay}</td>
+            </tr>`;
+    }).join('');
 }
 
 function setupAuditFilters() {
@@ -706,7 +796,7 @@ async function fetchData() {
             console.log('⚠️ No products data');
         }
 
-        updateDashboard(displayData);
+        updateDashboard(displayData, data.products || []);
 
         if (lastUpdateEl) lastUpdateEl.innerText = 'Updated: ' + new Date().toLocaleTimeString();
 
@@ -733,11 +823,26 @@ function clearFilters() {
 }
 
 
-function updateDashboard(data) {
+function updateDashboard(data, allProducts = null) {
     console.log('📊 updateDashboard called with:', {
         productsCount: data.products?.length,
         kpis: data.kpis
     });
+
+    // Auto-populate Category filter from FULL data (not sliced display data)
+    const categorySelect = document.getElementById('categoryInput');
+    const fullProducts = allProducts || data.products || [];
+    if (categorySelect && fullProducts.length > 0) {
+        const currentVal = categorySelect.value;
+        // Only rebuild if no category filter is applied (to avoid narrowing the list when filtering)
+        if (!currentVal) {
+            const categories = [...new Set(fullProducts.map(p => p.Category).filter(Boolean))].sort();
+            if (categories.length > 0) {
+                categorySelect.innerHTML = '<option value="">All Categories</option>' +
+                    categories.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
+        }
+    }
 
     // Update KPIs
     // Update KPIs (Audit Style)
@@ -1223,96 +1328,139 @@ function showLocationsModal(productId) {
     document.getElementById('locModalTitle').innerText = `Locations for: ${productData.name}`;
     const locationsListBody = document.getElementById('locationsListBody');
 
-    // Use details if available, otherwise fallback to simple locations
-    if (productData.details && productData.details.length > 0) {
-        // Count status types
-        let matchCount = 0, gainCount = 0, lossCount = 0;
-        productData.details.forEach(detail => {
-            const status = String(detail.locationStatus || '').toLowerCase();
-            if (status.includes('match') || status.includes('مطابق')) matchCount++;
-            else if (status.includes('extra') || status.includes('gain') || status.includes('زيادة')) gainCount++;
-            else if (status.includes('loss') || status.includes('نقص')) lossCount++;
-        });
+    const physicalLocs = productData.physicalDetails || [];
+    const systemLocs = productData.systemDetails || [];
 
-        // Calculate Accuracy
-        const totalCount = matchCount + gainCount + lossCount;
-        const accuracy = totalCount > 0 ? ((matchCount / totalCount) * 100).toFixed(1) : 0;
+    // Build unique location sets
+    const physicalLocSet = new Set(physicalLocs.map(d => d.location));
+    const systemLocSet = new Set(systemLocs.map(d => d.location));
 
-        // Summary header
-        const summaryHtml = `
-            <div class="flex flex-col gap-3 mb-4 p-3 bg-slate-100 rounded-lg">
-                <div class="flex justify-center items-center gap-2">
-                    <span class="text-sm font-semibold text-slate-600">Accuracy:</span>
-                    <span class="text-2xl font-bold ${accuracy >= 80 ? 'text-green-600' : accuracy >= 50 ? 'text-orange-600' : 'text-red-600'}">${accuracy}%</span>
+    // Compare: same vs different
+    const sameLocs = [...physicalLocSet].filter(loc => systemLocSet.has(loc));
+    const physicalOnlyLocs = [...physicalLocSet].filter(loc => !systemLocSet.has(loc));
+    const systemOnlyLocs = [...systemLocSet].filter(loc => !physicalLocSet.has(loc));
+
+    // Compute QTY totals & variance
+    const totalFinalQty = physicalLocs.reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
+    const totalSysQty = systemLocs.reduce((s, d) => s + (parseFloat(d.quantity) || 0), 0);
+    const qtyVariance = totalFinalQty - totalSysQty;
+    const varianceColor = qtyVariance === 0 ? 'text-green-700' : qtyVariance > 0 ? 'text-orange-700' : 'text-red-700';
+    const varianceSign = qtyVariance > 0 ? '+' : '';
+
+    // Summary header with comparison KPIs
+    const summaryHtml = `
+        <div class="flex flex-col gap-3 mb-4 p-3 bg-slate-100 rounded-lg">
+            <div class="flex justify-center items-center gap-4">
+                <div class="text-center">
+                    <span class="text-sm font-semibold text-cyan-600">Physical Locs</span>
+                    <span class="text-2xl font-bold text-slate-800 block">${productData.physicalLocations}</span>
                 </div>
-                <div class="flex gap-4 justify-center">
-                    <div class="flex items-center gap-2">
-                        <span class="px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-700">Match</span>
-                        <span class="font-bold text-slate-800">${matchCount}</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="px-2 py-1 text-xs font-bold rounded bg-orange-100 text-orange-700">Gain</span>
-                        <span class="font-bold text-slate-800">${gainCount}</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-700">Loss</span>
-                        <span class="font-bold text-slate-800">${lossCount}</span>
-                    </div>
+                <span class="text-slate-400 text-xl">vs</span>
+                <div class="text-center">
+                    <span class="text-sm font-semibold text-purple-600">System Locs</span>
+                    <span class="text-2xl font-bold text-slate-800 block">${productData.systemLocations}</span>
                 </div>
+            </div>
+            <div class="flex justify-center gap-3 flex-wrap">
+                <span class="px-3 py-1 text-sm font-bold rounded bg-green-100 text-green-700">Same: ${sameLocs.length}</span>
+                <span class="px-3 py-1 text-sm font-bold rounded bg-orange-100 text-orange-700">Different: ${physicalOnlyLocs.length + systemOnlyLocs.length}</span>
+            </div>
+            <div class="flex justify-center items-center gap-4 mt-1">
+                <div class="text-center">
+                    <span class="text-sm font-semibold text-cyan-600">Physical QTY</span>
+                    <span class="text-xl font-bold text-slate-800 block">${totalFinalQty.toLocaleString()}</span>
+                </div>
+                <span class="text-slate-400 text-xl">vs</span>
+                <div class="text-center">
+                    <span class="text-sm font-semibold text-purple-600">System QTY</span>
+                    <span class="text-xl font-bold text-slate-800 block">${totalSysQty.toLocaleString()}</span>
+                </div>
+                <div class="text-center border-l border-slate-300 pl-4">
+                    <span class="text-sm font-semibold text-slate-500">QTY Var</span>
+                    <span class="text-xl font-bold ${varianceColor} block">${varianceSign}${qtyVariance.toLocaleString()}</span>
+                </div>
+            </div>
+            <div class="flex justify-center">
+                <span class="px-3 py-1 text-sm font-bold rounded ${
+                    productData.locationStatus === 'match' ? 'bg-green-100 text-green-700' :
+                    productData.locationStatus === 'gain' ? 'bg-orange-100 text-orange-700' :
+                    'bg-red-100 text-red-700'
+                }">${productData.locationStatus.toUpperCase()}</span>
+            </div>
+        </div>
+    `;
+
+    // Same locations (exist in both Physical & System)
+    let sameHtml = '';
+    if (sameLocs.length > 0) {
+        sameHtml = `
+            <div class="mb-3">
+                <h4 class="text-sm font-bold text-green-600 mb-2">Same Locations (${sameLocs.length})</h4>
+                ${sameLocs.map(loc => {
+                    const pQty = physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0);
+                    const sQty = systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
+                    const locVar = pQty - sQty;
+                    const locVarColor = locVar === 0 ? 'text-green-700' : locVar > 0 ? 'text-orange-700' : 'text-red-700';
+                    const locVarSign = locVar > 0 ? '+' : '';
+                    return `
+                    <div class="p-3 bg-green-50 border border-green-100 rounded-lg mb-2">
+                        <p class="font-semibold text-slate-800 mb-1">${loc}</p>
+                        <div class="flex gap-4 text-sm">
+                            <span class="text-cyan-700 font-bold">Physical Qty: ${pQty}</span>
+                            <span class="text-purple-700 font-bold">System Qty: ${sQty}</span>
+                            <span class="${locVarColor} font-bold">Var: ${locVarSign}${locVar}</span>
+                        </div>
+                    </div>`;
+                }).join('')}
             </div>
         `;
-
-        const detailsHtml = productData.details.map(detail => {
-            const status = String(detail.locationStatus || '').toLowerCase();
-            const statusClass = status.includes('match') ? 'bg-green-100 text-green-700' :
-                status.includes('extra') || status.includes('gain') ? 'bg-orange-100 text-orange-700' :
-                    status.includes('loss') ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
-
-            const physicalQty = parseFloat(detail.finalQty) || 0;
-            const sysQty = parseFloat(detail.sysQty) || 0;
-            const variance = physicalQty - sysQty;
-            const varColor = variance > 0 ? 'text-orange-600' : variance < 0 ? 'text-red-600' : 'text-green-600';
-            const varSign = variance > 0 ? '+' : '';
-
-            return `
-            <div class="p-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-slate-100 transition-colors">
-                <div class="flex justify-between items-center mb-2">
-                    <p class="font-semibold text-slate-800">${detail.location}</p>
-                    <span class="px-2 py-1 text-xs font-bold rounded ${statusClass}">
-                        ${getStatusType(detail.locationStatus)}
-                    </span>
-                </div>
-                <div class="flex gap-4 text-sm">
-                    <div>
-                        <span class="text-slate-500">Physical:</span>
-                        <span class="font-bold text-slate-800 ml-1">${physicalQty}</span>
-                    </div>
-                    <div>
-                        <span class="text-slate-500">System:</span>
-                        <span class="font-bold text-slate-600 ml-1">${sysQty}</span>
-                    </div>
-                    <div>
-                        <span class="text-slate-500">Var:</span>
-                        <span class="font-bold ml-1 ${varColor}">${varSign}${variance}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-        }).join('');
-
-        locationsListBody.innerHTML = summaryHtml + detailsHtml;
-    } else {
-        locationsListBody.innerHTML = productData.locations.map(loc => `
-            <div class="p-4 bg-slate-50 border border-slate-100 rounded-lg hover:bg-slate-100 transition-colors">
-                <p class="font-semibold text-slate-800">${loc}</p>
-            </div>
-        `).join('');
     }
+
+    // Physical-only locations (in Scans but NOT in System)
+    let physicalOnlyHtml = '';
+    if (physicalOnlyLocs.length > 0) {
+        physicalOnlyHtml = `
+            <div class="mb-3">
+                <h4 class="text-sm font-bold text-cyan-600 mb-2">Physical Only — Not in System (${physicalOnlyLocs.length})</h4>
+                ${physicalOnlyLocs.map(loc => {
+                    const pQty = physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0);
+                    return `
+                    <div class="p-3 bg-cyan-50 border border-cyan-100 rounded-lg mb-2">
+                        <div class="flex justify-between items-center">
+                            <p class="font-semibold text-slate-800">${loc}</p>
+                            <span class="text-sm font-bold text-cyan-700">Qty: ${pQty}</span>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    // System-only locations (in System but NOT in Scans)
+    let systemOnlyHtml = '';
+    if (systemOnlyLocs.length > 0) {
+        systemOnlyHtml = `
+            <div class="mb-3">
+                <h4 class="text-sm font-bold text-purple-600 mb-2">System Only — Not in Physical (${systemOnlyLocs.length})</h4>
+                ${systemOnlyLocs.map(loc => {
+                    const sQty = systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
+                    return `
+                    <div class="p-3 bg-purple-50 border border-purple-100 rounded-lg mb-2">
+                        <div class="flex justify-between items-center">
+                            <p class="font-semibold text-slate-800">${loc}</p>
+                            <span class="text-sm font-bold text-purple-700">Qty: ${sQty}</span>
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    locationsListBody.innerHTML = summaryHtml + sameHtml + physicalOnlyHtml + systemOnlyHtml;
 
     // Show Modal
     const modal = document.getElementById('locationsModal');
     modal.classList.remove('hidden');
-    // Trigger reflow
     void modal.offsetWidth;
     modal.classList.remove('opacity-0');
     modal.querySelector('div').classList.remove('scale-95');
@@ -1352,52 +1500,48 @@ setInterval(() => {
 // No-op
 
 // Location Table Render Function
-function renderLocationTable(data, sortBy = 'locations') {
+function renderLocationTable(data, sortBy = 'physicalDesc') {
     const locationTable = document.getElementById('locationDetailsTable');
 
-    // Pre-calculate totals for each item
-    let enrichedData = data.map(item => {
-        let totalFinalQty = 0;
-        let totalSysQty = 0;
+    let sortedData = [...data];
 
-        (item.discrepancies || []).forEach(d => {
-            totalFinalQty += parseFloat(d.finalQty || d.physicalQty || 0) || 0;
-            totalSysQty += parseFloat(d.systemQty || 0) || 0;
-        });
-
-        const isMatch = totalFinalQty === totalSysQty;
-
-        return { ...item, totalFinalQty, totalSysQty, isMatch };
-    });
-
-    // Filter + Sort based on sortBy
-    if (sortBy === 'topMatch') {
-        // Only items where Total FinalQTY = Total Sys QTY, sorted by most matched locations
-        enrichedData = enrichedData
-            .filter(item => item.isMatch)
-            .sort((a, b) => b.matchCount - a.matchCount);
-    } else if (sortBy === 'topNotMatch') {
-        // Only items where Total FinalQTY != Total Sys QTY, sorted by most mismatched locations
-        enrichedData = enrichedData
-            .filter(item => !item.isMatch)
-            .sort((a, b) => b.notMatchCount - a.notMatchCount);
-    } else {
-        enrichedData.sort((a, b) => b.locationsCount - a.locationsCount);
+    // Sort
+    if (sortBy === 'physicalDesc') {
+        sortedData.sort((a, b) => b.physicalLocations - a.physicalLocations);
+    } else if (sortBy === 'systemDesc') {
+        sortedData.sort((a, b) => b.systemLocations - a.systemLocations);
+    } else if (sortBy === 'gainFirst') {
+        sortedData.sort((a, b) => (b.physicalLocations - b.systemLocations) - (a.physicalLocations - a.systemLocations));
+    } else if (sortBy === 'lossFirst') {
+        sortedData.sort((a, b) => (a.physicalLocations - a.systemLocations) - (b.physicalLocations - b.systemLocations));
     }
 
-    locationTable.innerHTML = enrichedData.map(item => {
-        // Determine Status based on comparison
-        let status = '';
-        let statusClass = '';
-        if (item.totalFinalQty === item.totalSysQty) {
-            status = 'Match';
-            statusClass = 'bg-green-100 text-green-700';
-        } else if (item.totalFinalQty > item.totalSysQty) {
-            status = 'Gain';
-            statusClass = 'bg-orange-100 text-orange-700';
+    locationTable.innerHTML = sortedData.map(item => {
+        let locStatus = '';
+        let locStatusClass = '';
+        if (item.locationStatus === 'match') {
+            locStatus = 'Match';
+            locStatusClass = 'bg-green-100 text-green-700';
         } else {
-            status = 'Loss';
-            statusClass = 'bg-red-100 text-red-700';
+            locStatus = 'Miss Match';
+            locStatusClass = 'bg-red-100 text-red-700';
+        }
+
+        // Calculate Total FinalQTY and Total Sys QTY
+        const totalFinalQty = (item.physicalDetails || []).reduce((sum, d) => sum + (parseFloat(d.finalQty) || 0), 0);
+        const totalSysQty = (item.systemDetails || []).reduce((sum, d) => sum + (parseFloat(d.quantity) || 0), 0);
+
+        let qtyStatus = '';
+        let qtyStatusClass = '';
+        if (totalFinalQty === totalSysQty) {
+            qtyStatus = 'Match';
+            qtyStatusClass = 'bg-green-100 text-green-700';
+        } else if (totalFinalQty > totalSysQty) {
+            qtyStatus = 'Gain';
+            qtyStatusClass = 'bg-orange-100 text-orange-700';
+        } else {
+            qtyStatus = 'Loss';
+            qtyStatusClass = 'bg-red-100 text-red-700';
         }
 
         return `
@@ -1405,19 +1549,29 @@ function renderLocationTable(data, sortBy = 'locations') {
                 <td class="px-4 py-3 font-bold text-slate-800">${item.name}</td>
                 <td class="px-4 py-3 text-center font-mono text-slate-600">${item.itemId}</td>
                 <td class="px-4 py-3 text-center">
-                    <span class="px-3 py-1 text-sm font-bold text-white bg-blue-600 rounded-full">
-                        ${item.locationsCount}
-                    </span>
-                </td>
-                <td class="px-4 py-3 text-center font-bold text-slate-800">${item.totalFinalQty.toLocaleString()}</td>
-                <td class="px-4 py-3 text-center font-bold text-slate-800">${item.totalSysQty.toLocaleString()}</td>
-                <td class="px-4 py-3 text-center">
-                    <span class="px-2 py-1 text-xs font-bold rounded ${statusClass}">
-                        ${status}
+                    <span class="px-3 py-1 text-sm font-bold text-white bg-cyan-600 rounded-full">
+                        ${item.physicalLocations}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                    <button onclick="showLocationsModal('${item.productId}')" 
+                    <span class="px-3 py-1 text-sm font-bold text-white bg-purple-600 rounded-full">
+                        ${item.systemLocations}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-1 text-xs font-bold rounded ${locStatusClass}">
+                        ${locStatus}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center font-bold text-slate-800">${totalFinalQty.toLocaleString()}</td>
+                <td class="px-4 py-3 text-center font-bold text-slate-800">${totalSysQty.toLocaleString()}</td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-1 text-xs font-bold rounded ${qtyStatusClass}">
+                        ${qtyStatus}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <button onclick="showLocationsModal('${item.itemId}')" 
                             class="px-3 py-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors">
                         View
                     </button>
@@ -1428,18 +1582,81 @@ function renderLocationTable(data, sortBy = 'locations') {
 }
 
 // Setup Location Filters
+function updateLocationKPIs(filtered) {
+    const updateEl = (id, html) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = html;
+    };
+
+    const totalProducts = filtered.length;
+    let totalPhysLocs = 0, totalSysLocs = 0;
+    const allPhysLocs = new Set();
+    const allSysLocs = new Set();
+
+    filtered.forEach(p => {
+        const physSet = new Set((p.physicalDetails || []).map(d => d.location));
+        const sysSet = new Set((p.systemDetails || []).map(d => d.location));
+        totalPhysLocs += physSet.size;
+        totalSysLocs += sysSet.size;
+        physSet.forEach(l => allPhysLocs.add(l));
+        sysSet.forEach(l => allSysLocs.add(l));
+    });
+
+    const uniqueAll = new Set([...allPhysLocs, ...allSysLocs]).size;
+    const locMatch = [...allPhysLocs].filter(l => allSysLocs.has(l)).length;
+    const locMissMatch = [...allPhysLocs].filter(l => !allSysLocs.has(l)).length + [...allSysLocs].filter(l => !allPhysLocs.has(l)).length;
+    const locMatchPct = uniqueAll > 0 ? Math.round((locMatch / uniqueAll) * 100) : 0;
+    const locMissMatchPct = uniqueAll > 0 ? Math.round((locMissMatch / uniqueAll) * 100) : 0;
+
+    // Units: compare Physical QTY vs System QTY per product
+    let matchUnits = 0, missMatchUnits = 0;
+    filtered.forEach(p => {
+        const totalFinalQty = (p.physicalDetails || []).reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
+        const totalSysQty = (p.systemDetails || []).reduce((s, d) => s + (parseFloat(d.quantity) || 0), 0);
+        if (totalFinalQty === totalSysQty) {
+            matchUnits += totalFinalQty;
+        } else {
+            missMatchUnits += Math.abs(totalFinalQty - totalSysQty);
+        }
+    });
+    const totalUnits = matchUnits + missMatchUnits;
+    const matchUnitsPct = totalUnits > 0 ? Math.round((matchUnits / totalUnits) * 100) : 0;
+    const missMatchUnitsPct = totalUnits > 0 ? Math.round((missMatchUnits / totalUnits) * 100) : 0;
+
+    updateEl('locTotalProducts', `${totalProducts}`);
+    updateEl('locTotalLocations', `${totalPhysLocs + totalSysLocs} <span class="text-sm text-slate-500">(${uniqueAll} unique)</span>`);
+    updateEl('locPhysicalLocations', `${totalPhysLocs} <span class="text-sm text-slate-500">(${allPhysLocs.size} unique)</span>`);
+    updateEl('locSystemLocations', `${totalSysLocs} <span class="text-sm text-slate-500">(${allSysLocs.size} unique)</span>`);
+    updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${uniqueAll}</span>`);
+    updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${locMatchPct}%</span>`);
+    updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${uniqueAll}</span>`);
+    updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${locMissMatchPct}%</span>`);
+    updateEl('locMatchUnits', `${matchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
+    updateEl('locMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${matchUnitsPct}%</span>`);
+    updateEl('locMissMatchUnits', `${missMatchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
+    updateEl('locMissMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${missMatchUnitsPct}%</span>`);
+
+    // Also update chart
+    updateLocationStatusChart({ matchCount: locMatch, missMatchCount: locMissMatch });
+}
+
 function setupLocationFilters() {
     const productSearch = document.getElementById('locationProductSearch');
     const idSearch = document.getElementById('locationIdSearch');
     const sortBy = document.getElementById('locationSortBy');
-    const dateFrom = document.getElementById('locationDateFrom');
-    const dateTo = document.getElementById('locationDateTo');
+    const statusFilter = document.getElementById('locationStatusFilter');
     const applyBtn = document.getElementById('applyLocationFilters');
     const clearBtn = document.getElementById('clearLocationFilters');
     const categoryFilter = document.getElementById('locationCategoryFilter');
     const exportBtn = document.getElementById('exportLocationTable');
+    const dateFromInput = document.getElementById('locationDateFrom');
+    const dateToInput = document.getElementById('locationDateTo');
 
     if (!applyBtn) return;
+
+    // Prevent duplicate listeners on repeated calls
+    if (applyBtn._locationFiltersSetup) return;
+    applyBtn._locationFiltersSetup = true;
 
     // Populate Categories dynamically
     function populateCategories() {
@@ -1454,39 +1671,45 @@ function setupLocationFilters() {
         const productTerm = (productSearch?.value || '').toLowerCase();
         const idTerm = (idSearch?.value || '').toLowerCase();
         const categoryVal = categoryFilter?.value || 'all';
-        const sortVal = sortBy?.value || 'locations';
-        const startDate = parseInputDate(dateFrom?.value, false) || new Date(1900, 0, 1);
-        const endDate = parseInputDate(dateTo?.value, true) || new Date(2099, 11, 31);
-        const hasDateFilter = dateFrom?.value || dateTo?.value;
+        const statusVal = statusFilter?.value || 'all';
+        const sortVal = sortBy?.value || 'physicalDesc';
+        const dateFromVal = dateFromInput?.value || '';
+        const dateToVal = dateToInput?.value || '';
+
+        // Parse date boundaries as YYYY-MM-DD strings for safe comparison
+        // (avoids timezone issues with Date objects)
 
         let filtered = window.locationTableFullData.filter(item => {
-            // Product name filter
-            const matchesProduct = !productTerm || item.name.toLowerCase().includes(productTerm);
-
-            // ID filter
-            const matchesId = !idTerm || item.itemId.toLowerCase().includes(idTerm);
-
-            // Category filter
+            const matchesProduct = !productTerm || (item.name || '').toLowerCase().includes(productTerm);
+            const matchesId = !idTerm || (item.itemId || '').toLowerCase().includes(idTerm);
             const matchesCategory = categoryVal === 'all' || item.category === categoryVal;
+            const matchesStatus = statusVal === 'all' || (statusVal === 'missmatch' ? (item.locationStatus === 'gain' || item.locationStatus === 'loss') : item.locationStatus === statusVal);
 
-            // Date filter - check if any discrepancy falls within date range
+            // Date filter: check if any physical detail date falls in range
             let matchesDate = true;
-            if (hasDateFilter) {
-                matchesDate = item.discrepancies.some(d => {
-                    const recordDate = parseFlexDate(d.dateNow);
-                    return recordDate && recordDate >= startDate && recordDate <= endDate;
-                });
+            if (dateFromVal || dateToVal) {
+                const details = item.physicalDetails || [];
+                if (details.length === 0) {
+                    matchesDate = false;
+                } else {
+                    matchesDate = details.some(d => {
+                        if (!d.date) return false;
+                        // Extract YYYY-MM-DD from ISO string for safe comparison
+                        const dateStr = d.date.substring(0, 10);
+                        if (dateFromVal && dateStr < dateFromVal) return false;
+                        if (dateToVal && dateStr > dateToVal) return false;
+                        return true;
+                    });
+                }
             }
 
-            return matchesProduct && matchesId && matchesCategory && matchesDate;
+            return matchesProduct && matchesId && matchesCategory && matchesStatus && matchesDate;
         });
 
         renderLocationTable(filtered, sortVal);
 
-        // Update Audit Status Chart and KPIs with filtered data
-        const filteredDiscrepancies = filtered.flatMap(item => item.discrepancies);
-        window.updateAuditStatusChart(filteredDiscrepancies);
-        window.updateAuditKPIs(filteredDiscrepancies);
+        // Update KPIs + Chart with filtered data
+        updateLocationKPIs(filtered);
     }
 
     applyBtn.addEventListener('click', applyFilters);
@@ -1495,15 +1718,14 @@ function setupLocationFilters() {
         if (productSearch) productSearch.value = '';
         if (idSearch) idSearch.value = '';
         if (categoryFilter) categoryFilter.value = 'all';
-        if (sortBy) sortBy.value = 'locations';
-        if (dateFrom) dateFrom.value = '';
-        if (dateTo) dateTo.value = '';
-        renderLocationTable(window.locationTableFullData, 'locations');
+        if (statusFilter) statusFilter.value = 'all';
+        if (sortBy) sortBy.value = 'physicalDesc';
+        if (dateFromInput) dateFromInput.value = '';
+        if (dateToInput) dateToInput.value = '';
+        renderLocationTable(window.locationTableFullData, 'physicalDesc');
 
-        // Reset Chart and KPIs to full data
-        const allDiscrepancies = window.locationTableFullData.flatMap(item => item.discrepancies);
-        window.updateAuditStatusChart(allDiscrepancies);
-        window.updateAuditKPIs(allDiscrepancies);
+        // Reset KPIs + Chart
+        updateLocationKPIs(window.locationTableFullData);
     });
 
     // Initial population
@@ -1522,57 +1744,9 @@ function setupLocationFilters() {
     });
 }
 
-function updateAuditStatusChart(discrepancies) {
-    let matchQtySum = 0;
-    let gainQtySum = 0;
-    let lossQtySum = 0;
-    let matchCount = 0;
-    let gainCount = 0;
-    let lossCount = 0;
-
-    discrepancies.forEach(d => {
-        const status = String(d.locationStatus || d.itemstatus || '').toLowerCase().trim();
-        const qty = parseFloat(d.finalQty) || parseFloat(d.physicalQty) || 0;
-
-        if (status.includes('match') || status.includes('مطابق') || status === 'ok') {
-            matchQtySum += qty;
-            matchCount++;
-        } else if (status.includes('extra') || status.includes('gain') || status.includes('زيادة') || status === '+') {
-            gainQtySum += qty;
-            gainCount++;
-        } else if (status.includes('loss') || status.includes('miss') || status.includes('ناقص') || status === '-') {
-            lossQtySum += qty;
-            lossCount++;
-        }
-    });
-
-    const totalQtySum = matchQtySum + gainQtySum + lossQtySum;
-    // Percentages based on location counts, not unit quantities
-    const totalLocCount = matchCount + gainCount + lossCount;
-    const matchPctRaw = totalLocCount > 0 ? (matchCount / totalLocCount) * 100 : 0;
-    const gainPctRaw = totalLocCount > 0 ? (gainCount / totalLocCount) * 100 : 0;
-    const lossPctRaw = totalLocCount > 0 ? (lossCount / totalLocCount) * 100 : 0;
-
-    // Combined "Miss Match" Values
-    const missMatchCount = gainCount + lossCount;
-    const missMatchQtySum = gainQtySum + lossQtySum;
-    const missMatchPctRaw = gainPctRaw + lossPctRaw;
-
-    // Update Counters
-    const updateEl = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.innerText = val;
-    };
-    
-    // Total Match
-    updateEl('auditMatchedCount', matchQtySum.toLocaleString());
-    updateEl('auditMatchedPercentage', `${matchPctRaw.toFixed(1)}%`);
-
-    // Combined Miss Match (Extra + Loss)
-    updateEl('auditMissMatchCount', missMatchQtySum.toLocaleString());
-    updateEl('auditMissMatchPercentage', `${missMatchPctRaw.toFixed(1)}%`);
-
-    updateEl('auditTotalPiecesCount', totalQtySum.toLocaleString());
+function updateLocationStatusChart(kpis) {
+    const matchCount = kpis.matchCount || 0;
+    const missMatchCount = kpis.missMatchCount || 0;
 
     const distCanvas = document.getElementById('statusDistChart');
     if (!distCanvas) return;
@@ -1581,10 +1755,10 @@ function updateAuditStatusChart(discrepancies) {
     auditCharts.distribution = new Chart(distCtx, {
         type: 'doughnut',
         data: {
-            labels: ['Match', 'Gain', 'Loss'],
+            labels: ['Match', 'Miss Match'],
             datasets: [{
-                data: [matchCount, gainCount, lossCount],
-                backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                data: [matchCount, missMatchCount],
+                backgroundColor: ['#10b981', '#f59e0b'],
                 borderWidth: 0
             }]
         },
@@ -1596,71 +1770,7 @@ function updateAuditStatusChart(discrepancies) {
         }
     });
 }
-window.updateAuditStatusChart = updateAuditStatusChart;
-
-function updateAuditKPIs(discrepancies) {
-    const totalItems = discrepancies.length;
-    let totalMatchItems = 0;
-    let totalGainItems = 0;
-    let totalLossItems = 0;
-
-    const allLocations = new Set();
-    const locationStatusMap = new Map(); // location -> Set of statuses found
-
-    discrepancies.forEach(d => {
-        const statusStr = String(d.locationStatus || '').toLowerCase().trim();
-        const location = d.location || 'Unknown';
-        allLocations.add(location);
-
-        let normalizedStatus = 'other';
-        if (statusStr.includes('match') || statusStr.includes('مطابق') || statusStr === 'ok') {
-            totalMatchItems++;
-            normalizedStatus = 'match';
-        } else if (statusStr.includes('extra') || statusStr.includes('gain') || statusStr.includes('زيادة') || statusStr === '+') {
-            totalGainItems++;
-            normalizedStatus = 'gain';
-        } else if (statusStr.includes('loss') || statusStr.includes('miss') || statusStr.includes('ناقص') || statusStr === '-') {
-            totalLossItems++;
-            normalizedStatus = 'loss';
-        }
-
-        if (!locationStatusMap.has(location)) {
-            locationStatusMap.set(location, new Set());
-        }
-        locationStatusMap.get(location).add(normalizedStatus);
-    });
-
-    // Mutually exclusive location sets
-    const matchLocationsCount = new Set();
-    const missMatchLocationsCount = new Set(); // Combined Gain/Loss
-
-    locationStatusMap.forEach((statuses, location) => {
-        if (statuses.has('loss') || statuses.has('gain')) {
-            missMatchLocationsCount.add(location);
-        } else if (statuses.has('match')) {
-            matchLocationsCount.add(location);
-        }
-    });
-
-    const totalMissMatchItems = totalGainItems + totalLossItems;
-    const locationAccuracy = totalItems > 0 ? (totalMatchItems / totalItems) * 100 : 0;
-
-    const updateEl = (id, html) => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = html;
-    };
-
-    const accEl = document.getElementById('auditAccuracy');
-    if (accEl) accEl.innerText = `${locationAccuracy.toFixed(0)}%`;
-    const barEl = document.getElementById('accuracyBar');
-    if (barEl) barEl.style.width = `${locationAccuracy}%`;
-
-    updateEl('auditTotalLocations', `${totalItems.toLocaleString()} <span class="text-sm text-slate-500">(${allLocations.size} unique)</span>`);
-    updateEl('auditTotalMatch', `${totalMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${matchLocationsCount.size} unique)</span>`);
-    
-    // Combined "Miss Match" KPI (Total Extra + Total Loss)
-    updateEl('auditTotalMissMatch', `${totalMissMatchItems.toLocaleString()} <span class="text-sm text-slate-500">(${missMatchLocationsCount.size} unique)</span>`);
-}
+window.updateLocationStatusChart = updateLocationStatusChart;
 
 function exportLocationData() {
     if (!window.locationTableFullData || window.locationTableFullData.length === 0) {
@@ -1668,53 +1778,249 @@ function exportLocationData() {
         return;
     }
 
-    console.log('📤 Exporting Detailed Location Report...');
+    console.log('Exporting Location Comparison Report...');
 
     let csvContent = "\uFEFF"; // BOM for Excel UTF-8
 
-    // Headers
     const headers = [
         "Product Name",
         "Item ID",
         "Category",
-        "Location",
-        "FinalQTY",
-        "System QTY",
-        "Status"
+        "Physical Locations",
+        "System Locations",
+        "Loc Status",
+        "Total FinalQTY",
+        "Total Sys QTY",
+        "QTY Variance",
+        "QTY Status"
     ];
     csvContent += headers.join(",") + "\n";
 
-    // Export each discrepancy for each product
     window.locationTableFullData.forEach(item => {
-        const productDiscrepancies = item.discrepancies || [];
+        const totalFinalQty = (item.physicalDetails || []).reduce((sum, d) => sum + (parseFloat(d.finalQty) || 0), 0);
+        const totalSysQty = (item.systemDetails || []).reduce((sum, d) => sum + (parseFloat(d.quantity) || 0), 0);
+        const qtyVariance = totalFinalQty - totalSysQty;
+        let qtyStatus = totalFinalQty === totalSysQty ? 'Match' : totalFinalQty > totalSysQty ? 'Gain' : 'Loss';
+        const locStatus = item.locationStatus === 'match' ? 'Match' : 'Miss Match';
 
-        productDiscrepancies.forEach(d => {
-            const rowData = [
-                `"${String(item.name || '').replace(/"/g, '""')}"`,
-                `"${String(item.itemId || '').replace(/"/g, '""')}"`,
-                `"${String(d.category || item.category || 'General').replace(/"/g, '""')}"`,
-                `"${String(d.location || 'Unknown').replace(/"/g, '""')}"`,
-                d.finalQty || d.physicalQty || 0,
-                d.systemQty || 0,
-                `"${String(d.locationStatus || 'N/A').replace(/"/g, '""').replace(/extra/gi, 'Gain').replace(/missing/gi, 'Loss')}"`
-            ];
-            csvContent += rowData.join(",") + "\n";
-        });
+        const rowData = [
+            `"${String(item.name || '').replace(/"/g, '""')}"`,
+            `"${String(item.itemId || '').replace(/"/g, '""')}"`,
+            `"${String(item.category || 'Other').replace(/"/g, '""')}"`,
+            item.physicalLocations || 0,
+            item.systemLocations || 0,
+            `"${locStatus}"`,
+            totalFinalQty,
+            totalSysQty,
+            qtyVariance,
+            `"${qtyStatus}"`
+        ];
+        csvContent += rowData.join(",") + "\n";
     });
 
-    // Download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `Detailed_Location_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `Location_Comparison_Report_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 }
 window.exportLocationData = exportLocationData;
-window.updateAuditKPIs = updateAuditKPIs;
+
+// ═══════════════════════════════════════════════════════════════
+// ── Scans Detail Table (raw rows from Scans sheet) ──
+// ═══════════════════════════════════════════════════════════════
+window.scansFullData = [];
+window.scansFilteredData = [];
+
+async function fetchScansRawData() {
+    try {
+        const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+        const res = await fetch('/api/inventory/scans-raw', {
+            headers: { 'Authorization': `Bearer ${userInfo?.token}` }
+        });
+        if (!res.ok) throw new Error('Failed to fetch scans data');
+        const data = await res.json();
+        window.scansFullData = data.rows || [];
+        window.scansFilteredData = [...window.scansFullData];
+        populateScansCategoryFilter();
+        renderScansDetailTable(window.scansFilteredData);
+        setupScansFilters();
+    } catch (err) {
+        console.error('[ScansTable]', err);
+    }
+}
+
+function populateScansCategoryFilter() {
+    const sel = document.getElementById('scansCategoryFilter');
+    if (!sel) return;
+    const cats = [...new Set(window.scansFullData.map(r => r.category || 'Other'))].sort();
+    sel.innerHTML = '<option value="all">All Categories</option>' +
+        cats.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function renderScansDetailTable(rows) {
+    const tbody = document.getElementById('scansDetailTableBody');
+    const empty = document.getElementById('scansDetailEmpty');
+    const countEl = document.getElementById('scansRowCount');
+    if (!tbody) return;
+
+    if (countEl) countEl.textContent = `(${rows.length} rows)`;
+
+    if (rows.length === 0) {
+        tbody.innerHTML = '';
+        if (empty) empty.classList.remove('hidden');
+        return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    // Limit render to 500 for performance
+    const display = rows.slice(0, 500);
+
+    tbody.innerHTML = display.map(r => {
+        const varClass = r.finalVar > 0 ? 'text-green-600' : r.finalVar < 0 ? 'text-red-600' : 'text-slate-500';
+        const varPrefix = r.finalVar > 0 ? '+' : '';
+        const locBadge = r.locStatus.toLowerCase().includes('match') && !r.locStatus.toLowerCase().includes('miss')
+            ? '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">Match</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">' + escHtml(r.locStatus) + '</span>';
+
+        const prodBadge = r.prodStatus.toLowerCase().includes('match') && !r.prodStatus.toLowerCase().includes('miss')
+            ? '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">Match</span>'
+            : r.prodStatus === 'N/A'
+            ? '<span class="text-xs text-slate-400">N/A</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">' + escHtml(r.prodStatus) + '</span>';
+
+        const empBadge = r.empAccuracy.toLowerCase().includes('accurate') || r.empAccuracy.toLowerCase().includes('match')
+            ? '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700">' + escHtml(r.empAccuracy) + '</span>'
+            : r.empAccuracy === 'N/A'
+            ? '<span class="text-xs text-slate-400">N/A</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">' + escHtml(r.empAccuracy) + '</span>';
+
+        return `<tr class="hover:bg-slate-50 transition-colors">
+            <td class="px-3 py-2 text-left font-mono text-xs">${escHtml(r.location)}</td>
+            <td class="px-3 py-2 text-left font-mono text-xs">${escHtml(r.barcode)}</td>
+            <td class="px-3 py-2 text-center font-mono text-xs text-blue-600">${escHtml(r.itemId)}</td>
+            <td class="px-3 py-2 text-left text-xs font-medium">${escHtml(r.productName)}</td>
+            <td class="px-3 py-2 text-center text-xs">${r.prodDate}</td>
+            <td class="px-3 py-2 text-center text-xs">${r.expDate}</td>
+            <td class="px-3 py-2 text-center font-bold">${r.finalQty}</td>
+            <td class="px-3 py-2 text-center">${r.sysQty}</td>
+            <td class="px-3 py-2 text-center font-bold ${varClass}">${varPrefix}${r.finalVar}</td>
+            <td class="px-3 py-2 text-center">${locBadge}</td>
+            <td class="px-3 py-2 text-center">${prodBadge}</td>
+            <td class="px-3 py-2 text-left text-xs">${escHtml(r.userName)}</td>
+            <td class="px-3 py-2 text-center">${empBadge}</td>
+            <td class="px-3 py-2 text-center text-xs">${escHtml(r.live)}</td>
+            <td class="px-3 py-2 text-center text-xs">${escHtml(r.liveWait)}</td>
+        </tr>`;
+    }).join('');
+
+    if (rows.length > 500) {
+        tbody.innerHTML += `<tr><td colspan="15" class="text-center text-xs text-slate-400 py-3">Showing first 500 of ${rows.length} rows. Use filters to narrow results.</td></tr>`;
+    }
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setupScansFilters() {
+    const applyBtn = document.getElementById('applyScansFilters');
+    const clearBtn = document.getElementById('clearScansFilters');
+    const exportBtn = document.getElementById('exportScansTable');
+    if (!applyBtn || applyBtn._scansFiltersSetup) return;
+    applyBtn._scansFiltersSetup = true;
+
+    applyBtn.addEventListener('click', () => {
+        const search = (document.getElementById('scansSearch')?.value || '').trim().toLowerCase();
+        const category = document.getElementById('scansCategoryFilter')?.value || 'all';
+        const dateFrom = document.getElementById('scansDateFrom')?.value || '';
+        const dateTo = document.getElementById('scansDateTo')?.value || '';
+
+        let filtered = window.scansFullData;
+
+        if (search) {
+            filtered = filtered.filter(r =>
+                (r.productName || '').toLowerCase().includes(search) ||
+                (r.location || '').toLowerCase().includes(search) ||
+                (r.itemId || '').toLowerCase().includes(search) ||
+                (r.barcode || '').toLowerCase().includes(search)
+            );
+        }
+        if (category !== 'all') {
+            filtered = filtered.filter(r => r.category === category);
+        }
+        if (dateFrom) {
+            filtered = filtered.filter(r => r.date && r.date >= dateFrom);
+        }
+        if (dateTo) {
+            filtered = filtered.filter(r => r.date && r.date <= dateTo);
+        }
+
+        window.scansFilteredData = filtered;
+        renderScansDetailTable(filtered);
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        const searchEl = document.getElementById('scansSearch');
+        const catEl = document.getElementById('scansCategoryFilter');
+        const fromEl = document.getElementById('scansDateFrom');
+        const toEl = document.getElementById('scansDateTo');
+        if (searchEl) searchEl.value = '';
+        if (catEl) catEl.value = 'all';
+        if (fromEl) fromEl.value = '';
+        if (toEl) toEl.value = '';
+        window.scansFilteredData = [...window.scansFullData];
+        renderScansDetailTable(window.scansFilteredData);
+    });
+
+    exportBtn?.addEventListener('click', () => exportScansCSV());
+}
+
+function exportScansCSV() {
+    const data = window.scansFilteredData;
+    if (!data || data.length === 0) { alert('No data to export'); return; }
+
+    let csv = "\uFEFF";
+    const headers = ['Location','Barcode','Item ID','Product Name','Category','Prod. Date','Exp. Date','Final QTY','Sys QTY','Final Var','Loc. Status','Prod. Status','User Name','Employee Accuracy','Live','Live Wait','Date'];
+    csv += headers.join(',') + '\n';
+
+    data.forEach(r => {
+        const row = [
+            `"${String(r.location||'').replace(/"/g,'""')}"`,
+            `"${String(r.barcode||'').replace(/"/g,'""')}"`,
+            `"${String(r.itemId||'').replace(/"/g,'""')}"`,
+            `"${String(r.productName||'').replace(/"/g,'""')}"`,
+            `"${String(r.category||'').replace(/"/g,'""')}"`,
+            `"${r.prodDate}"`,
+            `"${r.expDate}"`,
+            r.finalQty,
+            r.sysQty,
+            r.finalVar,
+            `"${String(r.locStatus||'').replace(/"/g,'""')}"`,
+            `"${String(r.prodStatus||'').replace(/"/g,'""')}"`,
+            `"${String(r.userName||'').replace(/"/g,'""')}"`,
+            `"${String(r.empAccuracy||'').replace(/"/g,'""')}"`,
+            `"${String(r.live||'').replace(/"/g,'""')}"`,
+            `"${String(r.liveWait||'').replace(/"/g,'""')}"`,
+            `"${r.date}"`
+        ];
+        csv += row.join(',') + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Scans_Detail_${new Date().toISOString().split('T')[0]}.csv`;
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
 function renderGhostTable(items) {
     const ghostTable = document.getElementById('ghostTable');
@@ -2155,6 +2461,7 @@ window.openLocationsModal = openLocationsModal;
 window.closeLocationsModal = closeLocationsModal;
 window.showLocationsModal = showLocationsModal;
 window.filterStaffByDate = filterStaffByDate;
+window.exportPutawayExcel = exportPutawayExcel;
 console.log('✅ All functions exposed:', {
     showView: typeof window.showView,
     fetchData: typeof window.fetchData,

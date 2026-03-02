@@ -124,46 +124,6 @@
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-2">Category</label>
                         <select id="categoryInput" class="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none">
                             <option value="">All Categories</option>
-                            <option value="Food">Food</option>
-                            <option value="Food Cupboard">Food Cupboard</option>
-                            <option value="Food Cupboard 2">Food Cupboard 2</option>
-                            <option value="Commodities">Commodities</option>
-                            <option value="Juice">Juice</option>
-                            <option value="Milk">Milk</option>
-                            <option value="Milk and Juice">Milk and Juice</option>
-                            <option value="Soda">Soda</option>
-                            <option value="Water">Water</option>
-                            <option value="Snacks">Snacks</option>
-                            <option value="Nonfood">Nonfood</option>
-                            <option value="Personal Care">Personal Care</option>
-                            <option value="Personal Care 2">Personal Care 2</option>
-                            <option value="Pet Care">Pet Care</option>
-                            <option value="Home Care">Home Care</option>
-                            <option value="Tissues">Tissues</option>
-                            <option value="Vitamins & Supplements">Vitamins & Supplements</option>
-                            <option value="Bags">Bags</option>
-                            <option value="Beauty">Beauty</option>
-                            <option value="BFC-Beans">BFC-Beans</option>
-                            <option value="BFC-Capsules">BFC-Capsules</option>
-                            <option value="Breadfast Coffee">Breadfast Coffee</option>
-                            <option value="Centralized Fresh">Centralized Fresh</option>
-                            <option value="Chocolates Warehouse">Chocolates Warehouse</option>
-                            <option value="Coffee & Other Drinks">Coffee & Other Drinks</option>
-                            <option value="Electronics">Electronics</option>
-                            <option value="Frozen Breaded Chicken,Sausage & Burgers">Frozen Breaded Chicken,Sausage & Burgers</option>
-                            <option value="Frozen Centralized">Frozen Centralized</option>
-                            <option value="Frozen Desserts and Ice Cream">Frozen Desserts and Ice Cream</option>
-                            <option value="Frozen Meals">Frozen Meals</option>
-                            <option value="Frozen Pastries">Frozen Pastries</option>
-                            <option value="Frozen Poultry & Meat">Frozen Poultry & Meat</option>
-                            <option value="Frozen Sea & Dog Foods">Frozen Sea & Dog Foods</option>
-                            <option value="Frozen Starters, cheese & FV">Frozen Starters, cheese & FV</option>
-                            <option value="Yogurt">Yogurt</option>
-                            <option value="Ramadan Gifts">Ramadan Gifts</option>
-                            <option value="Stationary & Games">Stationary & Games</option>
-                            <option value="Unit">Unit</option>
-                            <option value="Units">Units</option>
-                            <option value="(Blank)">(Blank)</option>
                         </select>
                     </div>
                     <div>
@@ -315,63 +275,59 @@
         <div id="view-location" class="hidden">
             
 
-            <!-- Audit KPIs -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Location KPIs Row 1: Totals -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-blue-500 h-full flex flex-col justify-center">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Products</p>
+                    <h3 id="locTotalProducts" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-indigo-500 h-full flex flex-col justify-center">
                     <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Locations</p>
-                    <h3 id="auditTotalLocations" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                    <h3 id="locTotalLocations" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500 h-full flex flex-col justify-center">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Match</p>
-                    <h3 id="auditTotalMatch" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-cyan-500 h-full flex flex-col justify-center">
+                    <p class="text-xs font-bold text-cyan-600 uppercase tracking-wider">Physical Locations</p>
+                    <h3 id="locPhysicalLocations" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500 h-full flex flex-col justify-center">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Miss Match</p>
-                    <h3 id="auditTotalMissMatch" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
-                </div>
-            </div>
-
-
-            <!-- Audit Counts -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm border-l-4 border-l-blue-500 flex-1 flex flex-col justify-center">
-                    <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Total Pieces</p>
-                    <h3 id="auditTotalPiecesCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
-                </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500 h-full flex flex-col justify-center">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (Sum => per Unit)</p>
-                    <h3 id="auditMatchedCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
-                </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500 h-full flex flex-col justify-center">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Miss Match (Sum => per Unit)</p>
-                    <h3 id="auditMissMatchCount" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-purple-500 h-full flex flex-col justify-center">
+                    <p class="text-xs font-bold text-purple-600 uppercase tracking-wider">System Locations</p>
+                    <h3 id="locSystemLocations" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
                 </div>
             </div>
-            
 
-
-            <!-- Audit Counts (%) -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div dir="ltr" class="bg-white p-4 rounded-xl border border-blue-100 shadow-sm border-l-4 border-l-blue-500">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Overall Accuracy</p>
-                    <div class="flex items-center gap-2 mt-1">
-                        <h3 id="auditAccuracy" class="text-xl font-extrabold text-slate-800">0%</h3>
-                        <div class="w-full bg-slate-100 h-1.5 rounded-full flex-1">
-                            <div id="accuracyBar" class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                        </div>
+            <!-- Location KPIs Row 2: Match / Miss Match (Locations + Units) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500 h-full flex">
+                    <!-- Left: Match Locations -->
+                    <div class="p-4 flex-1 flex flex-col justify-center border-r border-slate-100">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Match <span class="text-slate-400 font-normal">(Locations)</span></p>
+                        <h3 id="locMatchCount" class="text-3xl font-bold text-green-600 mt-1">0</h3>
+                        <p id="locMatchPercent" class="mt-2"><span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">0%</span></p>
+                    </div>
+                    <!-- Right: Match Per Units -->
+                    <div class="p-4 flex-1 flex flex-col justify-center">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Match <span class="text-slate-400 font-normal">(Units)</span></p>
+                        <h3 id="locMatchUnits" class="text-3xl font-bold text-green-600 mt-1">0</h3>
+                        <p id="locMatchUnitsPercent" class="mt-2"><span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">0%</span></p>
                     </div>
                 </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-green-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Matched (% Locations)</p>
-                    <h3 id="auditMatchedPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
-                </div>
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Miss Match (% Locations)</p>
-                    <h3 id="auditMissMatchPercentage" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
+                <div class="bg-white rounded-xl border border-slate-100 shadow-sm border-l-4 border-l-red-500 h-full flex">
+                    <!-- Left: Miss Match Locations -->
+                    <div class="p-4 flex-1 flex flex-col justify-center border-r border-slate-100">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Miss Match <span class="text-slate-400 font-normal">(Locations)</span></p>
+                        <h3 id="locMissMatchCount" class="text-3xl font-bold text-red-600 mt-1">0</h3>
+                        <p id="locMissMatchPercent" class="mt-2"><span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">0%</span></p>
+                    </div>
+                    <!-- Right: Miss Match Per Units -->
+                    <div class="p-4 flex-1 flex flex-col justify-center">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Miss Match <span class="text-slate-400 font-normal">(Units)</span></p>
+                        <h3 id="locMissMatchUnits" class="text-3xl font-bold text-red-600 mt-1">0</h3>
+                        <p id="locMissMatchUnitsPercent" class="mt-2"><span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">0%</span></p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Row 1: Location Accuracy (Full Width) -->
+            <!-- Row: Location Per Item Count Table (Full Width) -->
             <div class="mb-8">
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h3 class="font-bold text-slate-800 mb-4 flex items-center text-xl">
@@ -401,22 +357,23 @@
                         <select id="locationCategoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
                             <option value="all">All Categories</option>
                         </select>
+                        <!-- Status Filter -->
+                        <select id="locationStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <option value="all">All Statuses</option>
+                            <option value="match">Only Match</option>
+                            <option value="missmatch">Only Miss Match</option>
+                        </select>
                         <!-- Sort By -->
                         <select id="locationSortBy" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
-                            <option value="locations">Most Locations</option>
-                            <option value="topMatch">Top Match</option>
-                            <option value="topNotMatch">Top Miss Match</option>
+                            <option value="physicalDesc">Most Physical Locs</option>
+                            <option value="systemDesc">Most System Locs</option>
+                            <option value="gainFirst">Gain First</option>
+                            <option value="lossFirst">Loss First</option>
                         </select>
-                        <!-- Date Filters Stacked -->
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-center gap-2">
-                                <label class="text-xs text-slate-500 w-12">From:</label>
-                                <input type="date" id="locationDateFrom" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <label class="text-xs text-slate-500 w-12">To:</label>
-                                <input type="date" id="locationDateTo" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none">
-                            </div>
+                        <!-- Date Filter -->
+                        <div class="flex flex-col gap-1">
+                            <input type="date" id="locationDateFrom" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none" title="From Date">
+                            <input type="date" id="locationDateTo" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none" title="To Date">
                         </div>
                         <!-- Apply Button -->
                         <button id="applyLocationFilters" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors">
@@ -440,11 +397,13 @@
                                 <tr class="text-slate-600 font-semibold">
                                     <th class="px-4 py-3 text-left">Product Name</th>
                                     <th class="px-4 py-3 text-center">Item ID</th>
-                                    <th class="px-4 py-3 text-center">Locations Count</th>
+                                    <th class="px-4 py-3 text-center">Physical Locs</th>
+                                    <th class="px-4 py-3 text-center">System Locs</th>
+                                    <th class="px-4 py-3 text-center">Loc Status</th>
                                     <th class="px-4 py-3 text-center">Total FinalQTY</th>
                                     <th class="px-4 py-3 text-center">Total Sys QTY</th>
                                     <th class="px-4 py-3 text-center">QTY Status</th>
-                                    <th class="px-4 py-3 text-center">View Locations</th>
+                                    <th class="px-4 py-3 text-center">View Details</th>
                                 </tr>
                             </thead>
                             <tbody id="locationDetailsTable" class="divide-y divide-slate-100">
@@ -455,12 +414,12 @@
                 </div>
             </div>
 
-            <!-- Row 2: Status Distribution -->
+            <!-- Row: Status Distribution -->
             <div class="grid grid-cols-1 mb-8">
                 <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                     <h3 class="font-bold text-slate-800 mb-6 flex items-center">
                         <span class="w-2 h-6 bg-purple-600 rounded mr-3"></span>
-                        Audit Status Distribution
+                        Location Status Distribution
                     </h3>
                     <div class="h-80 flex items-center justify-center">
                         <canvas id="statusDistChart"></canvas>
@@ -470,153 +429,126 @@
 
 
 
-            <!-- Row 3: Ghost & Problematic Side-by-Side (Large Ghost, Small Top 5) -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                <!-- Ghost Locations Section (Spans 2/3) -->
-                <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <div class="flex items-center gap-2">
-                            <h3 class="font-bold text-slate-800">📉 Discrepancy Locations Putaway</h3>
-                            <span class="text-xs text-slate-500">(System Qty = 0, Physical > 0)</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded" id="ghostCount">0 Items</span>
-                            <button onclick="exportGhostData()" class="text-sm bg-blue-100 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-200 transition-colors flex items-center gap-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                Export CSV
-                            </button>
-                        </div>
-                    </div>
-                    <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap items-center gap-3 w-full border-t">
-                        <!-- Category Filter -->
-                        <div class="w-full md:w-auto">
-                            <select id="ghostCategoryFilter" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-purple-500 shadow-sm">
-                                <option value="all">All Categories</option>
-                            </select>
-                        </div>
-                        <!-- Date Filter -->
-                        <div class="flex items-center gap-2">
-                            <input type="date" id="ghostDateFrom" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-purple-500 shadow-sm" />
-                            <input type="date" id="ghostDateTo" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-purple-500 shadow-sm" />
-                        </div>
-                        <!-- Action Buttons -->
-                        <div class="flex gap-2">
-                            <button id="applyGhostFilters" onclick="window.applyGhostFilters()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm">
-                                Apply Filter
-                            </button>
-                            <button id="clearGhostFilters" onclick="window.clearGhostFilters()" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition-colors">
-                                Clear
-                            </button>
-                        </div>
-                        <span class="text-xs text-slate-500 font-medium ml-auto" id="ghostResultCount">Showing 0 rows</span>
-                    </div>
-
-                    <div class="h-[500px] overflow-y-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="bg-slate-50 sticky top-0 text-slate-500 font-semibold border-b">
-                                <tr>
-                                    <th class="px-6 py-3">Location</th>
-                                    <th class="px-6 py-3">Product</th>
-                                    <th class="px-6 py-3 text-right">System Qty</th>
-                                    <th class="px-6 py-3 text-right">Found Qty</th>
-                                    <th class="px-6 py-3 text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ghostTable" class="divide-y divide-slate-50">
-                                <!-- Populated by JS -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Problematic Products (Spans 1/3) -->
+            <!-- Row: Top 5 Miss Match & Discrepancy Putaway Side-by-Side -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <!-- Top 5 Miss Match Items -->
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
                     <div class="p-4 border-b border-slate-100 bg-slate-50">
-                        <h3 class="font-bold text-slate-800">⚠️ Top 5 Miss Match Items</h3>
+                        <h3 class="font-bold text-slate-800">⚠️ Top 5 Miss Match Items <span class="text-xs text-slate-400">(Most Location Differences)</span></h3>
                     </div>
-                    <div id="problematicList" class="p-4 space-y-4 h-[500px] overflow-y-auto">
-                        <!-- Problem products -->
+                    <div id="topMissMatchList" class="p-4 space-y-4 max-h-[500px] overflow-y-auto">
+                    </div>
+                </div>
+                <!-- Discrepancy Locations Putaway -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden h-fit">
+                    <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                        <h3 class="font-bold text-slate-800">📦 Discrepancy Locations Putaway <span class="text-xs text-slate-400">(System Qty = 0, Physical &gt; 0)</span></h3>
+                        <button onclick="exportPutawayExcel()" class="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 font-bold flex items-center gap-1" title="Export to Excel">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                            Export Excel
+                        </button>
+                    </div>
+                    <!-- Filters -->
+                    <div class="flex flex-wrap items-center gap-2 px-4 pt-3">
+                        <select id="putawayCategoryFilter" class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Categories</option>
+                        </select>
+                        <input type="date" id="putawayDateFrom" class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500" placeholder="From">
+                        <input type="date" id="putawayDateTo" class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-blue-500" placeholder="To">
+                        <button id="applyPutawayFilter" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-bold">Apply</button>
+                    </div>
+                    <div class="p-4 overflow-x-auto max-h-[450px] overflow-y-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-xs font-bold text-slate-500 uppercase border-b border-slate-200">
+                                    <th class="pb-2 pr-2">Product</th>
+                                    <th class="pb-2 pr-2">Location</th>
+                                    <th class="pb-2 pr-2 text-center">Physical Qty</th>
+                                    <th class="pb-2 text-center">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="putawayTableBody">
+                            </tbody>
+                        </table>
+                        <p id="putawayEmpty" class="text-sm text-slate-400 text-center py-6 hidden">No discrepancy putaway locations found.</p>
                     </div>
                 </div>
             </div>
-                    
-            <!-- Location Details Table Section -->
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-6">
-                <!-- Filters Header -->
-                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap items-center gap-3 w-full">
-                        <!-- Search Bar -->
-                        <div class="relative w-full md:w-80">
-                            <input type="text" id="auditSearchInput" placeholder="Search by Product, Location, or Barcode..." 
-                                class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all outline-none shadow-sm">
-                            <svg class="w-4 h-4 absolute left-3 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+            <!-- Scans Detail Table (Full Width) -->
+            <div class="mb-8">
+                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-4 flex items-center text-xl">
+                        <span class="w-2 h-8 bg-indigo-600 rounded mr-3"></span>
+                        Scans Detail Table
+                        <span class="ml-3 text-sm font-normal text-slate-400" id="scansRowCount"></span>
+                    </h3>
+
+                    <!-- Filters -->
+                    <div class="flex flex-wrap items-center gap-3 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        <!-- Search by Product Name / Location / ID -->
+                        <div class="relative w-full md:w-56">
+                            <input type="text" id="scansSearch" placeholder="Name, Location or ID..." 
+                                class="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+                            <svg class="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                             </svg>
                         </div>
-
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-center gap-2">
-                                <input type="date" id="auditDateFrom" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
-                                <input type="date" id="auditDateTo" class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-red-500 shadow-sm" />
-                            </div>
-                            <button id="auditDateClear" class="w-full px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-medium transition-colors">Clear Dates</button>
-                        </div>
-
-                        <select id="auditCategoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
+                        <!-- Category Filter -->
+                        <select id="scansCategoryFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
                             <option value="all">All Categories</option>
                         </select>
-
-                        <select id="auditStatusFilter" class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-500 shadow-sm">
-                            <option value="all">All Statuses</option>
-                            <option value="gain">Gain Only</option>
-                            <option value="loss">Loss Only</option>
-                            <option value="match">Match Only</option>
-                        </select>
-
-                        <button id="applyAuditFilters" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-md">
-                            Apply Filter
+                        <!-- Date Filter (From on top / To below) -->
+                        <div class="flex flex-col gap-1">
+                            <input type="date" id="scansDateFrom" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 outline-none" title="From Date">
+                            <input type="date" id="scansDateTo" class="px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500 outline-none" title="To Date">
+                        </div>
+                        <!-- Apply Button -->
+                        <button id="applyScansFilters" class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+                            Apply
                         </button>
-
-                        <span class="text-xs text-slate-500 font-medium ml-auto" id="auditResultCount">Showing 0 rows</span>
+                        <!-- Clear Button -->
+                        <button id="clearScansFilters" class="px-3 py-2 bg-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-300 transition-colors">
+                            Clear
+                        </button>
+                        <!-- Export Button -->
+                        <button id="exportScansTable" class="text-sm bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded hover:bg-indigo-200 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Export CSV
+                        </button>
                     </div>
 
-                    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
-                        <table class="w-full text-xs md:text-sm text-left">
-                            <thead class="bg-slate-50 sticky top-0 text-slate-500 font-semibold border-b z-10 whitespace-nowrap">
-                                <tr>
-                                    <th class="px-3 py-3">Location</th>
-                                <th class="px-3 py-3">Barcode</th>
-                                <th class="px-3 py-3">Item ID</th>
-                                <th class="px-3 py-3">Product Name</th>
-                                <th class="px-3 py-3">Prod. Date</th>
-                                <th class="px-3 py-3 text-right">Exp. Date</th>
-                                <th class="px-3 py-3 text-right">Final QTY</th>
-                                <th class="px-3 py-3 text-right">Sys QTY</th>
-                                <th class="px-3 py-3 text-right">Final Var</th>
-                                <th class="px-3 py-3">Loc. Status</th>
-                                <th class="px-3 py-3">Prod. Status</th>
-                                <th class="px-3 py-3">User Name</th>
-                                <th class="px-3 py-3 text-center">Employee Accuracy</th>
-                                <th class="px-3 py-3 text-center">Live</th>
-
-                                <th class="px-3 py-3">Live Wait</th>
-                            </tr>
-                        </thead>
-                        <tbody id="discrepancyTable" class="divide-y divide-slate-50">
-                        </tbody>
+                    <!-- Table -->
+                    <div class="overflow-auto max-h-[500px]">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-50 sticky top-0 border-b-2 border-slate-200">
+                                <tr class="text-slate-600 font-semibold text-xs">
+                                    <th class="px-3 py-3 text-left">Location</th>
+                                    <th class="px-3 py-3 text-left">Barcode</th>
+                                    <th class="px-3 py-3 text-center">Item ID</th>
+                                    <th class="px-3 py-3 text-left">Product Name</th>
+                                    <th class="px-3 py-3 text-center">Prod. Date</th>
+                                    <th class="px-3 py-3 text-center">Exp. Date</th>
+                                    <th class="px-3 py-3 text-center">Final QTY</th>
+                                    <th class="px-3 py-3 text-center">Sys QTY</th>
+                                    <th class="px-3 py-3 text-center">Final Var</th>
+                                    <th class="px-3 py-3 text-center">Loc. Status</th>
+                                    <th class="px-3 py-3 text-center">Prod. Status</th>
+                                    <th class="px-3 py-3 text-left">User Name</th>
+                                    <th class="px-3 py-3 text-center">Employee Accuracy</th>
+                                    <th class="px-3 py-3 text-center">Live</th>
+                                    <th class="px-3 py-3 text-center">Live Wait</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scansDetailTableBody" class="divide-y divide-slate-100">
+                            </tbody>
                         </table>
+                        <p id="scansDetailEmpty" class="text-sm text-slate-400 text-center py-6 hidden">No scan records found.</p>
                     </div>
                 </div>
+            </div>
 
         </div>
-
-
-
-
-
-
-
-
-
 
 
 

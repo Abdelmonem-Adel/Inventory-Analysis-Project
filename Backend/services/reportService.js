@@ -4,11 +4,12 @@ import ChartDataLabels from 'chartjs-plugin-datalabels';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { processInventoryData } from '../src/Util/analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const generateReportFiles = async (todayScans, dateString) => {
+export const generateReportFiles = async (todayScans, dateString, scansSheetData = null) => {
     const safeDateStr = dateString.replace(/\//g, '-');
     const tempDir = path.join(__dirname, '../temp');
 
@@ -21,15 +22,13 @@ export const generateReportFiles = async (todayScans, dateString) => {
     const piecesImagePath = path.join(tempDir, `daily_chart_pieces_${safeDateStr}.png`);
 
     try {
-        // 1. Generate Excel Report
+        // 1. Generate Excel Report (from Items sheet data)
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Today Items');
 
         if (todayScans.length > 0) {
-            // Extract headers from the first object
             const columns = Object.keys(todayScans[0]).map(key => ({ header: key, key: key }));
             worksheet.columns = columns;
-
             todayScans.forEach(scan => {
                 worksheet.addRow(scan);
             });
@@ -37,44 +36,34 @@ export const generateReportFiles = async (todayScans, dateString) => {
 
         await workbook.xlsx.writeFile(excelPath);
 
-        // 2. Generate Chart Images
+        // 2. Generate Chart Images using Scans sheet data + analytics.js (same as Inventory View)
         const width = 800;
         const height = 450;
-        const chartCallback = (ChartJS) => { 
-            // Register datalabels plugin globally within this canvas instance
+        const chartCallback = (ChartJS) => {
             ChartJS.register(ChartDataLabels);
         };
         const chartJSNodeCanvas = new ChartJSNodeCanvas({ width, height, chartCallback, backgroundColour: 'white' });
 
-        // Maps for Items (count) and Pieces (quantity sum)
+        // Use Scans sheet data processed through the same analytics.js pipeline as Inventory View
+        const chartSource = scansSheetData || todayScans;
+        
+        // Filter for today's date using processInventoryData (same logic as dashboard)
+        const todayDate = new Date();
+        const todayStr = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}-${String(todayDate.getDate()).padStart(2, '0')}`;
+        
+        const processed = processInventoryData(chartSource, todayStr, todayStr);
+        const products = processed ? processed.products : [];
+        
+        console.log(`[reportService] Processed ${products.length} products from Scans sheet for today (${todayStr}) using analytics.js`);
+
+        // Maps for Items (count) and Pieces (quantity sum) — built from analytics.js processed data
         const itemCategoryMap = {};
         const pieceCategoryMap = {};
-        
-        // Debugging: let's see what keys are available in the first row
-        if (todayScans.length > 0) {
-            console.log(`[reportService] Available keys in scan object:`, Object.keys(todayScans[0]));
-            // Also let's try to find a key that looks like 'locatonstatus' but might be formatted differently
-            const sampleRow = todayScans[0];
-            const statusKey = Object.keys(sampleRow).find(k => k.includes('status') || k.includes('location'));
-            console.log(`[reportService] Detected status key candidate: "${statusKey}" with value: "${sampleRow[statusKey]}"`);
-        }
 
-        for (const scan of todayScans) {
-            const cat = scan['category'] || 'Unknown';
-            // User clarified the column name is exactly "item status"
-            // The formatRows.js utility removes spaces and lowercases keys: "itemstatus"
-            const rawStatusValue = scan['itemstatus'] || scan['item status'] || scan['locatonstatus'] || '';
-            let rawStatus = (rawStatusValue).toString().toLowerCase().trim();
-            let status = '';
-            
-            if (rawStatus === 'match') status = 'match';
-            else if (rawStatus === 'gain' || rawStatus === 'extra') status = 'extra';
-            else if (rawStatus === 'loss' || rawStatus === 'missing') status = 'loss';
-
-            // User specified to sum numbers from "Final QTY" column for pieces
-            // formatRows utility maps "Final QTY" to "finalqty"
-            const qtyStr = scan['finalqty'] || scan['Final QTY'] || scan['quantity'] || scan['qty'] || 0;
-            const qty = isNaN(parseFloat(qtyStr)) ? 0 : parseFloat(qtyStr);
+        for (const p of products) {
+            const cat = p.Category || 'Unknown';
+            const status = p.ProductStatus; // Already normalized by analytics.js: match/gain/loss
+            const qty = p.PhysicalQty || 0;
 
             if (!itemCategoryMap[cat]) itemCategoryMap[cat] = { match: 0, extra: 0, loss: 0 };
             if (!pieceCategoryMap[cat]) pieceCategoryMap[cat] = { match: 0, extra: 0, loss: 0 };
@@ -82,24 +71,21 @@ export const generateReportFiles = async (todayScans, dateString) => {
             if (status === 'match') {
                 itemCategoryMap[cat].match++;
                 pieceCategoryMap[cat].match += qty;
-            } else if (status === 'extra') {
+            } else if (status === 'gain') {
                 itemCategoryMap[cat].extra++;
                 pieceCategoryMap[cat].extra += qty;
             } else if (status === 'loss') {
                 itemCategoryMap[cat].loss++;
                 pieceCategoryMap[cat].loss += qty;
-            } else if (rawStatus !== '') {
-                // If status is something else and not empty, log it for debugging
-                console.log(`[reportService] Unknown status value found in sheet: "${rawStatus}" for category ${cat}`);
             }
         }
 
         const labels = Object.keys(itemCategoryMap);
-        console.log(`[reportService] Generating charts for categories:`, labels);
-        console.log(`[reportService] Data summary:`, JSON.stringify(itemCategoryMap, null, 2));
+        console.log(`[reportService] Generating charts for ${labels.length} categories (from Scans/analytics.js):`, labels);
+        console.log(`[reportService] KPI summary:`, JSON.stringify(itemCategoryMap, null, 2));
 
         if (labels.length === 0) {
-            console.warn(`[reportService] WARNING: No categories found, chart will be empty.`);
+            console.warn(`[reportService] WARNING: No categories found for today, chart will be empty.`);
         }
 
         // Helper to generate chart images

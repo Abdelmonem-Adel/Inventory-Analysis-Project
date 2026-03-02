@@ -46,7 +46,8 @@ export function processInventoryData(data, startDate = null, endDate = null) {
         const SystemQuantity = findVal(['sysqty', 'systemqty', 'stockqty', 'logicalqty', 'bookqty', 'logicqty', 'expected', 'expectedqty', 'system']);
         const ProductStatus = findVal(['Product Status', 'Proudact Status', 'proudactstatus', 'status', 'matchstatus', 'discrepancy', 'match/extra/missingstatus', 'inventorystatus', 'notes', 'result', 'auditresult', 'finalstatus', 'adjustment', 'variance', 'audit', 'finalvar', 'firstvar', 'lotatus', 'locationstatus', 'proudactstatus', 'loc.status']);
         const rawCat = findVal(['product/productcategory', 'category', 'type', 'cat']);
-        const Category = (rawCat ? String(rawCat) : 'Other').trim();
+        // Normalize category: strip trailing " 2", " 3" etc. so "Food Cupboard 2" → "Food Cupboard"
+        let Category = (rawCat ? String(rawCat) : 'Other').trim().replace(/\s+\d+$/, '');
         const Warehouse = findVal(['warehouse', 'location', 'store']) || 'Main';
         const FinalQTY = findVal(['finalqty', 'final qty', 'final_qty', 'finalqtyoriginal']);
 

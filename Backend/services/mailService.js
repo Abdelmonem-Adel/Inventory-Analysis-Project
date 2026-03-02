@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 
-export const sendDailyReportEmail = async (excelPath, imagePath, dateString, piecesImagePath) => {
+export const sendDailyReportEmail = async (excelPath, imagePath, dateString, piecesImagePath, expiryAlerts = []) => {
     const { EMAIL_USER, EMAIL_PASS, EMAIL_TO } = process.env;
 
     if (!EMAIL_USER || !EMAIL_PASS || !EMAIL_TO) {
@@ -30,6 +30,96 @@ export const sendDailyReportEmail = async (excelPath, imagePath, dateString, pie
     const excelUrl = `https://yourdomain.com/reports/${dateString}`;
     const dashboardUrl = `https://breadfastwh.online`;
 
+    // Generate Expiry Alerts HTML
+    let expiryHtml = '';
+    if (expiryAlerts && expiryAlerts.length > 0) {
+        expiryHtml = `
+      <div style="margin-top:40px; padding:20px; background:#fff1f2; border-radius:10px; border:1px solid #fda4af;">
+        <h2 style="color:#9f1239; margin-top:0;">⚠️ Critical Expiry Alerts</h2>
+        <p style="color:#be123c;">The following items have expired or are nearing expiry. Please take action immediately.</p>
+        <table style="width:100%; border-collapse: collapse; margin-top:15px; background:white; border-radius:8px; overflow:hidden;">
+          <thead>
+            <tr style="background:#fb7185; color:white; text-align:left;">
+              <th style="padding:10px; border-bottom:1px solid #e2e8f0;">Product</th>
+              <th style="padding:10px; border-bottom:1px solid #e2e8f0;">Location</th>
+              <th style="padding:10px; border-bottom:1px solid #e2e8f0;">Expiry Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${expiryAlerts.map(item => `
+              <tr>
+                <td style="padding:10px; border-bottom:1px solid #f1f5f9;">${item.productName} <br><small style="color:#64748b;">ID: ${item.productId}</small></td>
+                <td style="padding:10px; border-bottom:1px solid #f1f5f9;">${item.location}</td>
+                <td style="padding:10px; border-bottom:1px solid #f1f5f9; color:#e11d48; font-weight:bold;">${new Date(item.expiryDate).toLocaleDateString('en-GB')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+        `;
+    }
+
+    // 1. Prepare Attachments
+    const attachments = [
+        {
+            filename: 'logo.png',
+            path: path.join(process.cwd(), '../Frontend/Image/BreadFast Logo.png'),
+            cid: 'companyLogo'
+        }
+    ];
+
+    if (excelPath) {
+        attachments.push({
+            filename: path.basename(excelPath),
+            path: excelPath
+        });
+    }
+
+    if (imagePath) {
+        attachments.push({
+            filename: path.basename(imagePath),
+            path: imagePath,
+            cid: 'dailyChartItems'
+        });
+    }
+
+    if (piecesImagePath) {
+        attachments.push({
+            filename: path.basename(piecesImagePath),
+            path: piecesImagePath,
+            cid: 'dailyChartPieces'
+        });
+    }
+
+    // 2. Prepare HTML Sections
+    let itemsChartHtml = '';
+    if (imagePath) {
+        itemsChartHtml = `
+      <!-- SECTION 1 -->
+      <div style="margin-top:30px;">
+        <h2 style="color:#0f172a;">📊 Item Summary</h2>
+        <p style="color:#64748b;">
+          This chart shows the total number of items per category.
+        </p>
+        <img src="cid:dailyChartItems" 
+             style="width:100%; border-radius:8px; border:1px solid #e2e8f0; margin-top:10px;" />
+      </div>`;
+    }
+
+    let piecesChartHtml = '';
+    if (piecesImagePath) {
+        piecesChartHtml = `
+      <!-- SECTION 2 -->
+      <div style="margin-top:40px;">
+        <h2 style="color:#0f172a;">📦 Quantity Summary</h2>
+        <p style="color:#64748b;">
+          This chart shows the total quantity of pieces per category.
+        </p>
+        <img src="cid:dailyChartPieces" 
+             style="width:100%; border-radius:8px; border:1px solid #e2e8f0; margin-top:10px;" />
+      </div>`;
+    }
+
     const mailOptions = {
         from: EMAIL_USER,
         to: recipients, // NodeMailer supports an array of emails
@@ -52,8 +142,11 @@ export const sendDailyReportEmail = async (excelPath, imagePath, dateString, pie
         Hello,
         <br><br>
         Please find below the latest <strong>Inventory Scan Report</strong>.
-        You can download the detailed Excel report or view the dashboard from the buttons below.
+        ${excelPath ? 'You can download the detailed Excel report or view the dashboard from the buttons below.' : 'View the dashboard from the button below.'}
       </p>
+
+      <!-- EXPIRY ALERTS -->
+      ${expiryHtml}
 
       <!-- ACTION BUTTONS -->
       <div style="text-align:center; margin:30px 0;">
@@ -76,25 +169,9 @@ export const sendDailyReportEmail = async (excelPath, imagePath, dateString, pie
 
       </div>
 
-      <!-- SECTION 1 -->
-      <div style="margin-top:30px;">
-        <h2 style="color:#0f172a;">📊 Item Summary</h2>
-        <p style="color:#64748b;">
-          This chart shows the total number of items per category.
-        </p>
-        <img src="cid:dailyChartItems" 
-             style="width:100%; border-radius:8px; border:1px solid #e2e8f0; margin-top:10px;" />
-      </div>
+      ${itemsChartHtml}
 
-      <!-- SECTION 2 -->
-      <div style="margin-top:40px;">
-        <h2 style="color:#0f172a;">📦 Quantity Summary</h2>
-        <p style="color:#64748b;">
-          This chart shows the total quantity of pieces per category.
-        </p>
-        <img src="cid:dailyChartPieces" 
-             style="width:100%; border-radius:8px; border:1px solid #e2e8f0; margin-top:10px;" />
-      </div>
+      ${piecesChartHtml}
 
     </div>
 
@@ -111,27 +188,7 @@ export const sendDailyReportEmail = async (excelPath, imagePath, dateString, pie
   </div>
 </div>
 `,
-        attachments: [
-            {
-                filename: 'logo.png',
-                path: path.join(process.cwd(), '../Frontend/Image/BreadFast Logo.png'),
-                cid: 'companyLogo'
-            },
-            {
-                filename: path.basename(excelPath),
-                path: excelPath,
-            },
-            {
-                filename: path.basename(imagePath),
-                path: imagePath,
-                cid: 'dailyChartItems'
-            },
-            {
-                filename: path.basename(piecesImagePath),
-                path: piecesImagePath,
-                cid: 'dailyChartPieces'
-            }
-        ]
+        attachments: attachments
     };
 
     try {
@@ -140,8 +197,8 @@ export const sendDailyReportEmail = async (excelPath, imagePath, dateString, pie
 
         // Delete temp files after sending
         try {
-            if (fs.existsSync(excelPath)) fs.unlinkSync(excelPath);
-            if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+            if (excelPath && fs.existsSync(excelPath)) fs.unlinkSync(excelPath);
+            if (imagePath && fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
             if (piecesImagePath && fs.existsSync(piecesImagePath)) fs.unlinkSync(piecesImagePath);
             console.log(`[mailService] Cleaned up temporary report files.`);
         } catch (cleanupErr) {

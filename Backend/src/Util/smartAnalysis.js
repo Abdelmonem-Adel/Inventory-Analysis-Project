@@ -75,7 +75,9 @@ export function analyzeInventory(data) {
         let productId = findVal(['itemid', 'productid', 'sku', 'barcode', 'productcode', 'code', 'id', 'breadfastid', 'ean']);
         if (productId) productId = String(productId).trim().toLowerCase();
 
-        const category = findVal(['category', 'group', 'class', 'family', 'dept', 'department']) || 'General';
+        const rawCategory = findVal(['category', 'group', 'class', 'family', 'dept', 'department']) || 'General';
+        // Normalize category: strip trailing " 2", " 3" etc. so "Food Cupboard 2" → "Food Cupboard"
+        const category = String(rawCategory).trim().replace(/\s+\d+$/, '');
         let staffName = findVal(['username']) || findVal(['user', 'agent', 'staff', 'worker', 'doneby', 'checkedby', 'counter', 'auditor', 'employee', 'namecountedby', 'ceraited', 'ceraitedby']) || 'System';
         staffName = staffName.trim();
 
