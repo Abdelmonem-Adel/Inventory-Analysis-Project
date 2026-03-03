@@ -326,10 +326,11 @@ export const getLocationAnalysis = async (req, res, next) => {
             const name = (physical?.name || system?.name || itemId);
             const category = physical?.category || 'Other';
 
-            // Determine location status
-            let locStatus = 'match';
-            if (physicalLocCount > systemLocCount) locStatus = 'gain';
-            else if (physicalLocCount < systemLocCount) locStatus = 'loss';
+            // Determine location status (compare actual location values)
+            const physLocs = physical ? physical.locations : new Set();
+            const sysLocs = system ? system.locations : new Set();
+            const locsMatch = physLocs.size === sysLocs.size && [...physLocs].every(l => sysLocs.has(l));
+            const locStatus = locsMatch ? 'match' : 'mismatch';
 
             totalPhysicalLocs += physicalLocCount;
             totalSystemLocs += systemLocCount;
@@ -364,31 +365,28 @@ export const getLocationAnalysis = async (req, res, next) => {
         // 4. KPIs
         const totalProducts = products.length;
         const matchProducts = products.filter(p => p.locationStatus === 'match').length;
-        const gainProducts = products.filter(p => p.locationStatus === 'gain').length;
-        const lossProducts = products.filter(p => p.locationStatus === 'loss').length;
+        const missMatchProducts = products.filter(p => p.locationStatus === 'mismatch').length;
 
         const kpis = {
             totalProducts,
-            totalPhysicalLocations: totalPhysicalLocs,
-            totalSystemLocations: totalSystemLocs,
-            totalLocations: totalPhysicalLocs + totalSystemLocs,
-            uniquePhysicalLocations: allPhysicalLocations.size,
-            uniqueSystemLocations: allSystemLocations.size,
-            uniqueLocationsAll: new Set([...allPhysicalLocations, ...allSystemLocations]).size,
+            rawPhysicalLocations: totalPhysicalLocs,
+            rawSystemLocations: totalSystemLocs,
+            rawTotalLocations: totalPhysicalLocs + totalSystemLocs,
+            totalPhysicalLocations: allPhysicalLocations.size,
+            totalSystemLocations: allSystemLocations.size,
+            totalLocations: new Set([...allPhysicalLocations, ...allSystemLocations]).size,
             // Location-based match/miss match
             locMatchCount: [...allPhysicalLocations].filter(l => allSystemLocations.has(l)).length,
             locMissMatchCount: [...allPhysicalLocations].filter(l => !allSystemLocations.has(l)).length + [...allSystemLocations].filter(l => !allPhysicalLocations.has(l)).length,
             // Product-based
             matchCount: matchProducts,
-            gainCount: gainProducts,
-            lossCount: lossProducts,
+            missMatchCount2: missMatchProducts,
             matchPercent: totalProducts > 0 ? Math.round((matchProducts / totalProducts) * 100) : 0,
-            gainPercent: totalProducts > 0 ? Math.round((gainProducts / totalProducts) * 100) : 0,
-            lossPercent: totalProducts > 0 ? Math.round((lossProducts / totalProducts) * 100) : 0,
+            missMatchPercent: totalProducts > 0 ? Math.round((missMatchProducts / totalProducts) * 100) : 0,
         };
 
         console.log(`[Location] Analysis complete: ${totalProducts} products, Physical: ${totalPhysicalLocs}, System: ${totalSystemLocs}`);
-        console.log(`[Location] Match: ${matchProducts}, Gain: ${gainProducts}, Loss: ${lossProducts}`);
+        console.log(`[Location] Match: ${matchProducts}, MissMatch: ${missMatchProducts}`);
 
         res.json({
             products,

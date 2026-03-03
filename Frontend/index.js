@@ -416,13 +416,13 @@ function updateLocationDashboard(data) {
     };
 
     updateEl('locTotalProducts', `${kpis.totalProducts || 0}`);
-    updateEl('locTotalLocations', `${kpis.totalLocations || 0} <span class="text-sm text-slate-500">(${kpis.uniqueLocationsAll || 0} unique)</span>`);
-    updateEl('locPhysicalLocations', `${kpis.totalPhysicalLocations || 0} <span class="text-sm text-slate-500">(${kpis.uniquePhysicalLocations || 0} unique)</span>`);
-    updateEl('locSystemLocations', `${kpis.totalSystemLocations || 0} <span class="text-sm text-slate-500">(${kpis.uniqueSystemLocations || 0} unique)</span>`);
+    updateEl('locTotalLocations', `${kpis.rawTotalLocations || 0} <span class="text-sm text-slate-500">(${kpis.totalLocations || 0} unique)</span>`);
+    updateEl('locPhysicalLocations', `${kpis.rawPhysicalLocations || 0} <span class="text-sm text-slate-500">(${kpis.totalPhysicalLocations || 0} unique)</span>`);
+    updateEl('locSystemLocations', `${kpis.rawSystemLocations || 0} <span class="text-sm text-slate-500">(${kpis.totalSystemLocations || 0} unique)</span>`);
 
     const locMatch = kpis.locMatchCount || 0;
     const locMissMatch = kpis.locMissMatchCount || 0;
-    const totalUniqueLocs = kpis.uniqueLocationsAll || 0;
+    const totalUniqueLocs = kpis.totalLocations || 0;
     const locMatchPct = totalUniqueLocs > 0 ? Math.round((locMatch / totalUniqueLocs) * 100) : 0;
     const locMissMatchPct = totalUniqueLocs > 0 ? Math.round((locMissMatch / totalUniqueLocs) * 100) : 0;
     updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${totalUniqueLocs}</span>`);
@@ -1383,9 +1383,8 @@ function showLocationsModal(productId) {
             <div class="flex justify-center">
                 <span class="px-3 py-1 text-sm font-bold rounded ${
                     productData.locationStatus === 'match' ? 'bg-green-100 text-green-700' :
-                    productData.locationStatus === 'gain' ? 'bg-orange-100 text-orange-700' :
                     'bg-red-100 text-red-700'
-                }">${productData.locationStatus.toUpperCase()}</span>
+                }">${productData.locationStatus === 'match' ? 'MATCH' : 'MISS MATCH'}</span>
             </div>
         </div>
     `;
@@ -1683,7 +1682,7 @@ function setupLocationFilters() {
             const matchesProduct = !productTerm || (item.name || '').toLowerCase().includes(productTerm);
             const matchesId = !idTerm || (item.itemId || '').toLowerCase().includes(idTerm);
             const matchesCategory = categoryVal === 'all' || item.category === categoryVal;
-            const matchesStatus = statusVal === 'all' || (statusVal === 'missmatch' ? (item.locationStatus === 'gain' || item.locationStatus === 'loss') : item.locationStatus === statusVal);
+            const matchesStatus = statusVal === 'all' || (statusVal === 'missmatch' ? item.locationStatus === 'mismatch' : item.locationStatus === statusVal);
 
             // Date filter: check if any physical detail date falls in range
             let matchesDate = true;

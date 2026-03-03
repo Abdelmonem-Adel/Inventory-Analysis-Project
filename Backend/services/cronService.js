@@ -56,4 +56,4 @@ export const startCronJob = () => {
     });
 
     console.log('[cronService] Scheduled daily scan report job for 9:30 AM Cairo time.');
-};
+}
