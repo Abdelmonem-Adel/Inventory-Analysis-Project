@@ -325,11 +325,11 @@ export function calculateKPIs(products) {
     const totalDistinct = uniqueLatestProducts.length;
     const totalRowsCount = products.length;
 
-    const accuracy = totalRowsCount > 0 ? Math.round((recordsMatch / totalRowsCount) * 100) : 0;
+    const accuracy = totalDistinct > 0 ? Math.round((stableCount / totalDistinct) * 100) : 0;
 
-    const percentStable = totalRowsCount > 0 ? Math.round((recordsMatch / totalRowsCount) * 100) : 0;
-    const percentIncreased = totalRowsCount > 0 ? Math.round((recordsGain / totalRowsCount) * 100) : 0;
-    const percentDecreased = totalRowsCount > 0 ? Math.round((recordsLoss / totalRowsCount) * 100) : 0;
+    const percentStable = totalDistinct > 0 ? Math.round((stableCount / totalDistinct) * 100) : 0;
+    const percentIncreased = totalDistinct > 0 ? Math.round((increasedCount / totalDistinct) * 100) : 0;
+    const percentDecreased = totalDistinct > 0 ? Math.round((decreasedCount / totalDistinct) * 100) : 0;
 
     // دعم جميع الأسماء الممكنة لعمود Final QTY في إجمالي القطع
     const totalFinalQty = products.reduce((acc, p) => {

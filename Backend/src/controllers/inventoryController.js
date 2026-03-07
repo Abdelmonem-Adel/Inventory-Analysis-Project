@@ -181,14 +181,30 @@ export const getProductivityAnalysis = async (req, res, next) => {
  */
 export const getLocationAnalysis = async (req, res, next) => {
     try {
-        console.log("[Location] Fetching Scans and sys stocks data...");
+        console.log("[Location] Fetching Scans, sys stocks, total location status, and location per items data...");
 
-        const [scansData, sysStocksData] = await Promise.all([
+        const [scansData, sysStocksData, totalLocStatusData, locPerItemsData] = await Promise.all([
             readSheet(process.env.SPREADSHEET_ID, 'Scans'),
-            readSheet(process.env.SPREADSHEET_ID, 'sys stocks')
+            readSheet(process.env.SPREADSHEET_ID, 'sys stocks'),
+            readSheet(process.env.SPREADSHEET_ID, 'total location status').catch(err => {
+                console.warn(`[Location] Could not read 'total location status' sheet: ${err.message}`);
+                return null;
+            }),
+            readSheet(process.env.SPREADSHEET_ID, 'location per items').catch(err => {
+                console.warn(`[Location] Could not read 'location per items' sheet: ${err.message}`);
+                return null;
+            })
         ]);
 
-        console.log(`[Location] Scans: ${scansData?.length || 0} rows, Sys Stocks: ${sysStocksData?.length || 0} rows`);
+        console.log(`[Location] Scans: ${scansData?.length || 0} rows, Sys Stocks: ${sysStocksData?.length || 0} rows, TotalLocStatus: ${totalLocStatusData?.length || 0} rows, LocPerItems: ${locPerItemsData?.length || 0} rows`);
+        if (totalLocStatusData && totalLocStatusData.length > 0) {
+            console.log(`[Location] total location status sample row keys:`, Object.keys(totalLocStatusData[0]));
+            console.log(`[Location] total location status last row:`, JSON.stringify(totalLocStatusData[totalLocStatusData.length - 1]));
+        }
+        if (locPerItemsData && locPerItemsData.length > 0) {
+            console.log(`[Location] location per items sample row keys:`, Object.keys(locPerItemsData[0]));
+            console.log(`[Location] location per items first row:`, JSON.stringify(locPerItemsData[0]));
+        }
 
         // Helper: normalize keys and find value
         const findVal = (row, possibleKeys) => {
@@ -308,6 +324,22 @@ export const getLocationAnalysis = async (req, res, next) => {
             });
         });
 
+        // 2b. Build locPerItems map from "location per items" sheet
+        const locPerItemsMap = {};
+        if (locPerItemsData && locPerItemsData.length > 0) {
+            locPerItemsData.forEach(row => {
+                let itemId = findVal(row, ['itemid', 'productid', 'sku', 'barcode', 'breadfastid', 'id']);
+                if (itemId) itemId = String(itemId).trim().toLowerCase();
+                if (!itemId) return;
+                if (!locPerItemsMap[itemId]) {
+                    locPerItemsMap[itemId] = { matchLocs: 0, missMatchLocs: 0 };
+                }
+                locPerItemsMap[itemId].matchLocs += parseInt(findVal(row, ['match']) || 0) || 0;
+                locPerItemsMap[itemId].missMatchLocs += parseInt(findVal(row, ['totalmissmatch', 'totalmismatch']) || 0) || 0;
+            });
+            console.log(`[Location] Built locPerItems map for ${Object.keys(locPerItemsMap).length} items`);
+        }
+
         // 3. Merge: for each product, calculate physical vs system location counts
         const allItemIds = new Set([...Object.keys(physicalMap), ...Object.keys(systemMap)]);
         const products = [];
@@ -349,12 +381,16 @@ export const getLocationAnalysis = async (req, res, next) => {
                 });
             }
 
+            const locPerItem = locPerItemsMap[itemId] || { matchLocs: 0, missMatchLocs: 0 };
+
             products.push({
                 itemId,
                 name,
                 category,
                 physicalLocations: physicalLocCount,
                 systemLocations: systemLocCount,
+                matchLocs: locPerItem.matchLocs,
+                missMatchLocs: locPerItem.missMatchLocs,
                 locationStatus: locStatus,
                 physicalDetails: physical?.details || [],
                 systemDetails: system?.details || [],
@@ -367,6 +403,29 @@ export const getLocationAnalysis = async (req, res, next) => {
         const matchProducts = products.filter(p => p.locationStatus === 'match').length;
         const missMatchProducts = products.filter(p => p.locationStatus === 'mismatch').length;
 
+        // Parse "total location status" sheet for location KPIs
+        // Columns: date | Location | Extra | Missing | total miss match | Match | total locations
+        let sheetTotalLocations = 0;
+        let sheetLocMatch = 0;
+        let sheetLocMissMatch = 0;
+
+        if (totalLocStatusData && totalLocStatusData.length > 0) {
+            // Total locations = number of rows in the sheet
+            sheetTotalLocations = totalLocStatusData.length;
+            // Sum match and miss match from all rows
+            totalLocStatusData.forEach(row => {
+                sheetLocMatch += parseInt(findVal(row, ['match']) || 0) || 0;
+                sheetLocMissMatch += parseInt(findVal(row, ['totalmissmatch', 'totalmismatch']) || 0) || 0;
+            });
+            console.log(`[Location] From 'total location status' sheet (${totalLocStatusData.length} rows): Total=${sheetTotalLocations}, Match=${sheetLocMatch}, MissMatch=${sheetLocMissMatch}`);
+        } else {
+            // Fallback to calculated values if sheet not available
+            sheetTotalLocations = new Set([...allPhysicalLocations, ...allSystemLocations]).size;
+            sheetLocMatch = [...allPhysicalLocations].filter(l => allSystemLocations.has(l)).length;
+            sheetLocMissMatch = [...allPhysicalLocations].filter(l => !allSystemLocations.has(l)).length + [...allSystemLocations].filter(l => !allPhysicalLocations.has(l)).length;
+            console.log(`[Location] 'total location status' sheet not found, using calculated values`);
+        }
+
         const kpis = {
             totalProducts,
             rawPhysicalLocations: totalPhysicalLocs,
@@ -374,10 +433,10 @@ export const getLocationAnalysis = async (req, res, next) => {
             rawTotalLocations: totalPhysicalLocs + totalSystemLocs,
             totalPhysicalLocations: allPhysicalLocations.size,
             totalSystemLocations: allSystemLocations.size,
-            totalLocations: new Set([...allPhysicalLocations, ...allSystemLocations]).size,
-            // Location-based match/miss match
-            locMatchCount: [...allPhysicalLocations].filter(l => allSystemLocations.has(l)).length,
-            locMissMatchCount: [...allPhysicalLocations].filter(l => !allSystemLocations.has(l)).length + [...allSystemLocations].filter(l => !allPhysicalLocations.has(l)).length,
+            totalLocations: sheetTotalLocations,
+            // Location-based match/miss match (from sheet)
+            locMatchCount: sheetLocMatch,
+            locMissMatchCount: sheetLocMissMatch,
             // Product-based
             matchCount: matchProducts,
             missMatchCount2: missMatchProducts,
@@ -386,7 +445,7 @@ export const getLocationAnalysis = async (req, res, next) => {
         };
 
         console.log(`[Location] Analysis complete: ${totalProducts} products, Physical: ${totalPhysicalLocs}, System: ${totalSystemLocs}`);
-        console.log(`[Location] Match: ${matchProducts}, MissMatch: ${missMatchProducts}`);
+        console.log(`[Location] Match: ${sheetLocMatch}, MissMatch: ${sheetLocMissMatch}`);
 
         res.json({
             products,

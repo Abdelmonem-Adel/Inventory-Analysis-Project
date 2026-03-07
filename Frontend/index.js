@@ -403,6 +403,8 @@ function updateLocationDashboard(data) {
             category: p.category,
             physicalLocations: p.physicalLocations,
             systemLocations: p.systemLocations,
+            matchLocs: p.matchLocs || 0,
+            missMatchLocs: p.missMatchLocs || 0,
             locationStatus: p.locationStatus,
             physicalDetails: p.physicalDetails || [],
             systemDetails: p.systemDetails || []
@@ -416,9 +418,7 @@ function updateLocationDashboard(data) {
     };
 
     updateEl('locTotalProducts', `${kpis.totalProducts || 0}`);
-    updateEl('locTotalLocations', `${kpis.rawTotalLocations || 0} <span class="text-sm text-slate-500">(${kpis.totalLocations || 0} unique)</span>`);
-    updateEl('locPhysicalLocations', `${kpis.rawPhysicalLocations || 0} <span class="text-sm text-slate-500">(${kpis.totalPhysicalLocations || 0} unique)</span>`);
-    updateEl('locSystemLocations', `${kpis.rawSystemLocations || 0} <span class="text-sm text-slate-500">(${kpis.totalSystemLocations || 0} unique)</span>`);
+    updateEl('locTotalLocations', `${kpis.totalLocations || 0}`);
 
     const locMatch = kpis.locMatchCount || 0;
     const locMissMatch = kpis.locMissMatchCount || 0;
@@ -430,27 +430,8 @@ function updateLocationDashboard(data) {
     updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${totalUniqueLocs}</span>`);
     updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${locMissMatchPct}%</span>`);
 
-    // Units KPIs (initial load)
-    let matchUnits = 0, missMatchUnits = 0;
-    products.forEach(p => {
-        const totalFinalQty = (p.physicalDetails || []).reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
-        const totalSysQty = (p.systemDetails || []).reduce((s, d) => s + (parseFloat(d.quantity) || 0), 0);
-        if (totalFinalQty === totalSysQty) {
-            matchUnits += totalFinalQty;
-        } else {
-            missMatchUnits += Math.abs(totalFinalQty - totalSysQty);
-        }
-    });
-    const totalUnits = matchUnits + missMatchUnits;
-    const matchUnitsPct = totalUnits > 0 ? Math.round((matchUnits / totalUnits) * 100) : 0;
-    const missMatchUnitsPct = totalUnits > 0 ? Math.round((missMatchUnits / totalUnits) * 100) : 0;
-    updateEl('locMatchUnits', `${matchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
-    updateEl('locMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${matchUnitsPct}%</span>`);
-    updateEl('locMissMatchUnits', `${missMatchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
-    updateEl('locMissMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${missMatchUnitsPct}%</span>`);
-
     // Render main table
-    renderLocationTable(products, 'physicalDesc');
+    renderLocationTable(products, 'matchLocsDesc');
 
     // Status Distribution Chart (location-based)
     updateLocationStatusChart({
@@ -1352,18 +1333,14 @@ function showLocationsModal(productId) {
         <div class="flex flex-col gap-3 mb-4 p-3 bg-slate-100 rounded-lg">
             <div class="flex justify-center items-center gap-4">
                 <div class="text-center">
-                    <span class="text-sm font-semibold text-cyan-600">Physical Locs</span>
-                    <span class="text-2xl font-bold text-slate-800 block">${productData.physicalLocations}</span>
+                    <span class="text-sm font-semibold text-green-600">Match Locs</span>
+                    <span class="text-2xl font-bold text-green-700 block">${productData.matchLocs}</span>
                 </div>
                 <span class="text-slate-400 text-xl">vs</span>
                 <div class="text-center">
-                    <span class="text-sm font-semibold text-purple-600">System Locs</span>
-                    <span class="text-2xl font-bold text-slate-800 block">${productData.systemLocations}</span>
+                    <span class="text-sm font-semibold text-red-600">Miss Match Locs</span>
+                    <span class="text-2xl font-bold text-red-700 block">${productData.missMatchLocs}</span>
                 </div>
-            </div>
-            <div class="flex justify-center gap-3 flex-wrap">
-                <span class="px-3 py-1 text-sm font-bold rounded bg-green-100 text-green-700">Same: ${sameLocs.length}</span>
-                <span class="px-3 py-1 text-sm font-bold rounded bg-orange-100 text-orange-700">Different: ${physicalOnlyLocs.length + systemOnlyLocs.length}</span>
             </div>
             <div class="flex justify-center items-center gap-4 mt-1">
                 <div class="text-center">
@@ -1389,12 +1366,12 @@ function showLocationsModal(productId) {
         </div>
     `;
 
-    // Same locations (exist in both Physical & System)
-    let sameHtml = '';
+    // Match locations (exist in both Physical & System)
+    let matchHtml = '';
     if (sameLocs.length > 0) {
-        sameHtml = `
+        matchHtml = `
             <div class="mb-3">
-                <h4 class="text-sm font-bold text-green-600 mb-2">Same Locations (${sameLocs.length})</h4>
+                <h4 class="text-sm font-bold text-green-600 mb-2">Match Locations (${productData.matchLocs})</h4>
                 ${sameLocs.map(loc => {
                     const pQty = physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0);
                     const sQty = systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
@@ -1415,19 +1392,29 @@ function showLocationsModal(productId) {
         `;
     }
 
-    // Physical-only locations (in Scans but NOT in System)
-    let physicalOnlyHtml = '';
-    if (physicalOnlyLocs.length > 0) {
-        physicalOnlyHtml = `
+    // Miss Match locations (in one side only)
+    const missMatchLocs = [
+        ...physicalOnlyLocs.map(loc => ({ loc, source: 'Physical Only' })),
+        ...systemOnlyLocs.map(loc => ({ loc, source: 'System Only' }))
+    ];
+    let missMatchHtml = '';
+    if (missMatchLocs.length > 0) {
+        missMatchHtml = `
             <div class="mb-3">
-                <h4 class="text-sm font-bold text-cyan-600 mb-2">Physical Only — Not in System (${physicalOnlyLocs.length})</h4>
-                ${physicalOnlyLocs.map(loc => {
-                    const pQty = physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0);
+                <h4 class="text-sm font-bold text-red-600 mb-2">Miss Match Locations (${productData.missMatchLocs})</h4>
+                ${missMatchLocs.map(({ loc, source }) => {
+                    const isPhysical = source === 'Physical Only';
+                    const qty = isPhysical
+                        ? physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0)
+                        : systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
                     return `
-                    <div class="p-3 bg-cyan-50 border border-cyan-100 rounded-lg mb-2">
+                    <div class="p-3 bg-red-50 border border-red-100 rounded-lg mb-2">
                         <div class="flex justify-between items-center">
-                            <p class="font-semibold text-slate-800">${loc}</p>
-                            <span class="text-sm font-bold text-cyan-700">Qty: ${pQty}</span>
+                            <div>
+                                <p class="font-semibold text-slate-800">${loc}</p>
+                                <span class="text-xs font-bold ${isPhysical ? 'text-cyan-600' : 'text-purple-600'}">${source}</span>
+                            </div>
+                            <span class="text-sm font-bold text-slate-700">Qty: ${qty}</span>
                         </div>
                     </div>`;
                 }).join('')}
@@ -1435,27 +1422,7 @@ function showLocationsModal(productId) {
         `;
     }
 
-    // System-only locations (in System but NOT in Scans)
-    let systemOnlyHtml = '';
-    if (systemOnlyLocs.length > 0) {
-        systemOnlyHtml = `
-            <div class="mb-3">
-                <h4 class="text-sm font-bold text-purple-600 mb-2">System Only — Not in Physical (${systemOnlyLocs.length})</h4>
-                ${systemOnlyLocs.map(loc => {
-                    const sQty = systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
-                    return `
-                    <div class="p-3 bg-purple-50 border border-purple-100 rounded-lg mb-2">
-                        <div class="flex justify-between items-center">
-                            <p class="font-semibold text-slate-800">${loc}</p>
-                            <span class="text-sm font-bold text-purple-700">Qty: ${sQty}</span>
-                        </div>
-                    </div>`;
-                }).join('')}
-            </div>
-        `;
-    }
-
-    locationsListBody.innerHTML = summaryHtml + sameHtml + physicalOnlyHtml + systemOnlyHtml;
+    locationsListBody.innerHTML = summaryHtml + matchHtml + missMatchHtml;
 
     // Show Modal
     const modal = document.getElementById('locationsModal');
@@ -1499,20 +1466,20 @@ setInterval(() => {
 // No-op
 
 // Location Table Render Function
-function renderLocationTable(data, sortBy = 'physicalDesc') {
+function renderLocationTable(data, sortBy = 'matchLocsDesc') {
     const locationTable = document.getElementById('locationDetailsTable');
 
     let sortedData = [...data];
 
     // Sort
-    if (sortBy === 'physicalDesc') {
-        sortedData.sort((a, b) => b.physicalLocations - a.physicalLocations);
-    } else if (sortBy === 'systemDesc') {
-        sortedData.sort((a, b) => b.systemLocations - a.systemLocations);
+    if (sortBy === 'matchLocsDesc') {
+        sortedData.sort((a, b) => (b.matchLocs || 0) - (a.matchLocs || 0));
+    } else if (sortBy === 'missMatchLocsDesc') {
+        sortedData.sort((a, b) => (b.missMatchLocs || 0) - (a.missMatchLocs || 0));
     } else if (sortBy === 'gainFirst') {
-        sortedData.sort((a, b) => (b.physicalLocations - b.systemLocations) - (a.physicalLocations - a.systemLocations));
+        sortedData.sort((a, b) => (b.matchLocs || 0) - (a.matchLocs || 0));
     } else if (sortBy === 'lossFirst') {
-        sortedData.sort((a, b) => (a.physicalLocations - a.systemLocations) - (b.physicalLocations - b.systemLocations));
+        sortedData.sort((a, b) => (b.missMatchLocs || 0) - (a.missMatchLocs || 0));
     }
 
     locationTable.innerHTML = sortedData.map(item => {
@@ -1548,18 +1515,13 @@ function renderLocationTable(data, sortBy = 'physicalDesc') {
                 <td class="px-4 py-3 font-bold text-slate-800">${item.name}</td>
                 <td class="px-4 py-3 text-center font-mono text-slate-600">${item.itemId}</td>
                 <td class="px-4 py-3 text-center">
-                    <span class="px-3 py-1 text-sm font-bold text-white bg-cyan-600 rounded-full">
-                        ${item.physicalLocations}
+                    <span class="px-3 py-1 text-sm font-bold text-white bg-green-600 rounded-full">
+                        ${item.matchLocs || 0}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                    <span class="px-3 py-1 text-sm font-bold text-white bg-purple-600 rounded-full">
-                        ${item.systemLocations}
-                    </span>
-                </td>
-                <td class="px-4 py-3 text-center">
-                    <span class="px-2 py-1 text-xs font-bold rounded ${locStatusClass}">
-                        ${locStatus}
+                    <span class="px-3 py-1 text-sm font-bold text-white bg-red-600 rounded-full">
+                        ${item.missMatchLocs || 0}
                     </span>
                 </td>
                 <td class="px-4 py-3 text-center font-bold text-slate-800">${totalFinalQty.toLocaleString()}</td>
@@ -1607,33 +1569,12 @@ function updateLocationKPIs(filtered) {
     const locMatchPct = uniqueAll > 0 ? Math.round((locMatch / uniqueAll) * 100) : 0;
     const locMissMatchPct = uniqueAll > 0 ? Math.round((locMissMatch / uniqueAll) * 100) : 0;
 
-    // Units: compare Physical QTY vs System QTY per product
-    let matchUnits = 0, missMatchUnits = 0;
-    filtered.forEach(p => {
-        const totalFinalQty = (p.physicalDetails || []).reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
-        const totalSysQty = (p.systemDetails || []).reduce((s, d) => s + (parseFloat(d.quantity) || 0), 0);
-        if (totalFinalQty === totalSysQty) {
-            matchUnits += totalFinalQty;
-        } else {
-            missMatchUnits += Math.abs(totalFinalQty - totalSysQty);
-        }
-    });
-    const totalUnits = matchUnits + missMatchUnits;
-    const matchUnitsPct = totalUnits > 0 ? Math.round((matchUnits / totalUnits) * 100) : 0;
-    const missMatchUnitsPct = totalUnits > 0 ? Math.round((missMatchUnits / totalUnits) * 100) : 0;
-
     updateEl('locTotalProducts', `${totalProducts}`);
-    updateEl('locTotalLocations', `${totalPhysLocs + totalSysLocs} <span class="text-sm text-slate-500">(${uniqueAll} unique)</span>`);
-    updateEl('locPhysicalLocations', `${totalPhysLocs} <span class="text-sm text-slate-500">(${allPhysLocs.size} unique)</span>`);
-    updateEl('locSystemLocations', `${totalSysLocs} <span class="text-sm text-slate-500">(${allSysLocs.size} unique)</span>`);
+    updateEl('locTotalLocations', `${uniqueAll}`);
     updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${uniqueAll}</span>`);
     updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${locMatchPct}%</span>`);
     updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${uniqueAll}</span>`);
     updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${locMissMatchPct}%</span>`);
-    updateEl('locMatchUnits', `${matchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
-    updateEl('locMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${matchUnitsPct}%</span>`);
-    updateEl('locMissMatchUnits', `${missMatchUnits.toLocaleString()} <span class="text-base text-slate-400 font-normal">/ ${totalUnits.toLocaleString()}</span>`);
-    updateEl('locMissMatchUnitsPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${missMatchUnitsPct}%</span>`);
 
     // Also update chart
     updateLocationStatusChart({ matchCount: locMatch, missMatchCount: locMissMatch });
@@ -1671,7 +1612,7 @@ function setupLocationFilters() {
         const idTerm = (idSearch?.value || '').toLowerCase();
         const categoryVal = categoryFilter?.value || 'all';
         const statusVal = statusFilter?.value || 'all';
-        const sortVal = sortBy?.value || 'physicalDesc';
+        const sortVal = sortBy?.value || 'matchLocsDesc';
         const dateFromVal = dateFromInput?.value || '';
         const dateToVal = dateToInput?.value || '';
 
@@ -1718,10 +1659,10 @@ function setupLocationFilters() {
         if (idSearch) idSearch.value = '';
         if (categoryFilter) categoryFilter.value = 'all';
         if (statusFilter) statusFilter.value = 'all';
-        if (sortBy) sortBy.value = 'physicalDesc';
+        if (sortBy) sortBy.value = 'matchLocsDesc';
         if (dateFromInput) dateFromInput.value = '';
         if (dateToInput) dateToInput.value = '';
-        renderLocationTable(window.locationTableFullData, 'physicalDesc');
+        renderLocationTable(window.locationTableFullData, 'matchLocsDesc');
 
         // Reset KPIs + Chart
         updateLocationKPIs(window.locationTableFullData);
