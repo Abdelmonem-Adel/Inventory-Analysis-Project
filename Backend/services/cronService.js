@@ -49,7 +49,7 @@ export const runDailyJob = async () => {
 
 export const startCronJob = () => {
     // Run every day at 10:00 AM Cairo time
-    cron.schedule('20 10 * * *', () => {
+    cron.schedule('3 10 * * *', () => {
         runDailyJob();
     }, {
         timezone: "Africa/Cairo"
