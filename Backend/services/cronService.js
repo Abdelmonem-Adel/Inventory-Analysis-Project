@@ -48,12 +48,12 @@ export const runDailyJob = async () => {
 };
 
 export const startCronJob = () => {
-    // Run every day at 9:30 AM Cairo time
-    cron.schedule('30 9 * * *', () => {
+    // Run every day at 10:00 AM Cairo time
+    cron.schedule('5 10 * * *', () => {
         runDailyJob();
     }, {
         timezone: "Africa/Cairo"
     });
 
-    console.log('[cronService] Scheduled daily scan report job for 9:30 AM Cairo time.');
+    console.log('[cronService] Scheduled daily scan report job for 10:00 AM Cairo time.');
 }
