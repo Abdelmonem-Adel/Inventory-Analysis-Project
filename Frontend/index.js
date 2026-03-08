@@ -451,17 +451,10 @@ function updateLocationDashboard(data) {
         missMatchCount: kpis.locMissMatchCount || 0
     });
 
-    // Top 5 Miss Match Items (most location differences)
+    // Top 5 Miss Match Items (most miss match locations from locationstatus column)
     const topMissMatchDiv = document.getElementById('topMissMatchList');
-    const missMatchItems = products.filter(p => p.locationStatus !== 'match')
-        .map(item => {
-            const physSet = new Set((item.physicalDetails || []).map(d => d.location));
-            const sysSet = new Set((item.systemDetails || []).map(d => d.location));
-            const physOnly = [...physSet].filter(l => !sysSet.has(l)).length;
-            const sysOnly = [...sysSet].filter(l => !physSet.has(l)).length;
-            return { ...item, diffCount: physOnly + sysOnly };
-        })
-        .sort((a, b) => b.diffCount - a.diffCount)
+    const missMatchItems = products.filter(p => (p.missMatchLocs || 0) > 0)
+        .sort((a, b) => (b.missMatchLocs || 0) - (a.missMatchLocs || 0))
         .slice(0, 5);
 
     if (missMatchItems.length > 0) {
@@ -475,9 +468,9 @@ function updateLocationDashboard(data) {
                     </div>
                 </div>
                 <div class="flex items-center gap-2 ml-11 flex-wrap">
-                    <span class="px-2 py-1 text-xs font-bold text-cyan-700 bg-cyan-100 rounded">Physical: ${item.physicalLocations}</span>
-                    <span class="px-2 py-1 text-xs font-bold text-purple-700 bg-purple-100 rounded">System: ${item.systemLocations}</span>
-                    <span class="px-2 py-1 text-xs font-bold text-white bg-orange-500 rounded">Diff: ${item.diffCount}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-green-700 bg-green-100 rounded">Match Locs: ${item.matchLocs || 0}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-red-700 bg-red-100 rounded">Miss Match Locs: ${item.missMatchLocs || 0}</span>
+                    <span class="px-2 py-1 text-xs font-bold text-white bg-orange-500 rounded">Total: ${(item.matchLocs || 0) + (item.missMatchLocs || 0)}</span>
                 </div>
             </div>
         `).join('');
