@@ -181,29 +181,17 @@ export const getProductivityAnalysis = async (req, res, next) => {
  */
 export const getLocationAnalysis = async (req, res, next) => {
     try {
-        console.log("[Location] Fetching Scans, sys stocks, total location status, and location per items data...");
+        console.log("[Location] Fetching data from 'total locations & items' sheet...");
 
-        const [scansData, sysStocksData, totalLocStatusData, locPerItemsData] = await Promise.all([
-            readSheet(process.env.SPREADSHEET_ID, 'Scans'),
-            readSheet(process.env.SPREADSHEET_ID, 'sys stocks'),
-            readSheet(process.env.SPREADSHEET_ID, 'total location status').catch(err => {
-                console.warn(`[Location] Could not read 'total location status' sheet: ${err.message}`);
-                return null;
-            }),
-            readSheet(process.env.SPREADSHEET_ID, 'location per items').catch(err => {
-                console.warn(`[Location] Could not read 'location per items' sheet: ${err.message}`);
-                return null;
-            })
-        ]);
+        const rawData = await readSheet(process.env.SPREADSHEET_ID, 'total locations & items');
+        console.log(`[Location] Loaded ${rawData?.length || 0} rows from 'total locations & items'`);
 
-        console.log(`[Location] Scans: ${scansData?.length || 0} rows, Sys Stocks: ${sysStocksData?.length || 0} rows, TotalLocStatus: ${totalLocStatusData?.length || 0} rows, LocPerItems: ${locPerItemsData?.length || 0} rows`);
-        if (totalLocStatusData && totalLocStatusData.length > 0) {
-            console.log(`[Location] total location status sample row keys:`, Object.keys(totalLocStatusData[0]));
-            console.log(`[Location] total location status last row:`, JSON.stringify(totalLocStatusData[totalLocStatusData.length - 1]));
+        if (!rawData || rawData.length === 0) {
+            return res.json({ products: [], kpis: { totalProducts: 0, totalLocations: 0 }, meta: { timestamp: new Date().toISOString() } });
         }
-        if (locPerItemsData && locPerItemsData.length > 0) {
-            console.log(`[Location] location per items sample row keys:`, Object.keys(locPerItemsData[0]));
-            console.log(`[Location] location per items first row:`, JSON.stringify(locPerItemsData[0]));
+
+        if (rawData.length > 0) {
+            console.log(`[Location] Sample row keys:`, Object.keys(rawData[0]));
         }
 
         // Helper: normalize keys and find value
@@ -219,7 +207,7 @@ export const getLocationAnalysis = async (req, res, next) => {
             return null;
         };
 
-        // Parse date helper
+        // Parse date helper (handles Excel serial numbers and various date formats)
         const parseFlexDate = (dateVal) => {
             if (!dateVal || dateVal === 'N/A' || dateVal === '') return null;
             const num = Number(dateVal);
@@ -252,200 +240,167 @@ export const getLocationAnalysis = async (req, res, next) => {
             return null;
         };
 
-        // 1. Build Physical locations from Scans sheet (per product ID)
-        const physicalMap = {}; // { itemId: { name, category, locations: Set, details: [] } }
-
         const junkValues = ['0', '(blank)', 'null', 'undefined', '-', 'nan', 'n/a', ''];
 
-        (scansData || []).forEach(row => {
-            let itemId = findVal(row, ['itemid', 'productid', 'sku', 'barcode', 'breadfastid', 'id']);
+        // Group rows by item ID
+        const itemMap = {}; // { itemId: { name, category, locations: { locName: { qtyphy, qtysys, vr, locationstatus, productstatus, date } } } }
+        const allLocations = new Set();
+
+        rawData.forEach(row => {
+            let itemId = findVal(row, ['id', 'itemid', 'productid', 'sku', 'breadfastid']);
             if (itemId) itemId = String(itemId).trim().toLowerCase();
             if (!itemId || junkValues.includes(itemId)) return;
 
-            const location = findVal(row, ['productlocation', 'location', 'warehouse', 'store', 'loc']) || 'Unknown';
-            const productName = findVal(row, ['productname', 'name', 'item', 'product']);
+            const location = findVal(row, ['location', 'productlocation', 'warehouse', 'loc']) || 'Unknown';
+            const productName = findVal(row, ['productname', 'name', 'product']);
             const rawCat = findVal(row, ['category', 'type', 'cat']);
             const category = (rawCat ? String(rawCat) : 'Other').trim().replace(/\s+\d+$/, '');
-            const finalQty = parseFloat(findVal(row, ['finalqty', 'physicalqty', 'qty', 'quantity']) || 0) || 0;
-            const sysQty = parseFloat(findVal(row, ['sysqty', 'systemqty', 'logicalqty']) || 0) || 0;
-            const locStatus = findVal(row, ['locatonstatus', 'locationstatus', 'locstatus']) || '';
-            const prodStatus = findVal(row, ['productstatus', 'status']) || '';
-            const dateStr = findVal(row, ['date', 'datenow', 'countdate']);
-            const parsedDate = parseFlexDate(dateStr);
+            const qtyPhy = parseFloat(findVal(row, ['qtyphy', 'physicalqty', 'finalqty', 'qty']) || 0) || 0;
+            const qtySys = parseFloat(findVal(row, ['qtysys', 'systemqty', 'sysqty']) || 0) || 0;
+            const locStatus = String(findVal(row, ['locationstatus', 'locatonstatus', 'locstatus']) || '').trim();
+            const prodStatus = String(findVal(row, ['productstatus', 'status']) || '').trim();
+            const dateVal = findVal(row, ['date', 'datenow', 'countdate']);
+            const parsedDate = parseFlexDate(dateVal);
 
-            if (!physicalMap[itemId]) {
-                physicalMap[itemId] = {
+            allLocations.add(location);
+
+            if (!itemMap[itemId]) {
+                itemMap[itemId] = {
                     name: productName,
                     category,
-                    locations: new Set(),
-                    details: []
+                    rows: []
                 };
             }
+            if (!itemMap[itemId].name && productName) itemMap[itemId].name = productName;
 
-            physicalMap[itemId].locations.add(location);
-            if (!physicalMap[itemId].name && productName) physicalMap[itemId].name = productName;
-
-            physicalMap[itemId].details.push({
+            itemMap[itemId].rows.push({
                 location,
-                finalQty,
-                sysQty,
+                qtyPhy,
+                qtySys,
                 locationStatus: locStatus,
                 productStatus: prodStatus,
                 date: parsedDate ? parsedDate.toISOString() : null
             });
         });
 
-        // 2. Build System locations from sys stocks sheet (per product ID)
-        const systemMap = {}; // { itemId: { locations: Set, details: [] } }
-
-        (sysStocksData || []).forEach(row => {
-            let itemId = findVal(row, ['itemid', 'productid', 'sku', 'barcode', 'breadfastid', 'id']);
-            if (itemId) itemId = String(itemId).trim().toLowerCase();
-            if (!itemId || junkValues.includes(itemId)) return;
-
-            const location = findVal(row, ['productlocation', 'location', 'warehouse', 'store', 'loc']) || 'Unknown';
-            const qty = parseFloat(findVal(row, ['quantity', 'qty', 'sysqty', 'systemqty']) || 0) || 0;
-            const productName = findVal(row, ['productname', 'name', 'item', 'product']);
-
-            if (!systemMap[itemId]) {
-                systemMap[itemId] = {
-                    name: productName,
-                    locations: new Set(),
-                    details: []
-                };
-            }
-
-            systemMap[itemId].locations.add(location);
-            if (!systemMap[itemId].name && productName) systemMap[itemId].name = productName;
-
-            systemMap[itemId].details.push({
-                location,
-                quantity: qty
-            });
-        });
-
-        // 2b. Build locPerItems map from "location per items" sheet
-        const locPerItemsMap = {};
-        if (locPerItemsData && locPerItemsData.length > 0) {
-            locPerItemsData.forEach(row => {
-                let itemId = findVal(row, ['itemid', 'productid', 'sku', 'barcode', 'breadfastid', 'id']);
-                if (itemId) itemId = String(itemId).trim().toLowerCase();
-                if (!itemId) return;
-                if (!locPerItemsMap[itemId]) {
-                    locPerItemsMap[itemId] = { matchLocs: 0, missMatchLocs: 0 };
-                }
-                locPerItemsMap[itemId].matchLocs += parseInt(findVal(row, ['match']) || 0) || 0;
-                locPerItemsMap[itemId].missMatchLocs += parseInt(findVal(row, ['totalmissmatch', 'totalmismatch']) || 0) || 0;
-            });
-            console.log(`[Location] Built locPerItems map for ${Object.keys(locPerItemsMap).length} items`);
-        }
-
-        // 3. Merge: for each product, calculate physical vs system location counts
-        const allItemIds = new Set([...Object.keys(physicalMap), ...Object.keys(systemMap)]);
+        // Build products array matching frontend expectations
         const products = [];
+        let totalLocMatchCount = 0;
+        let totalLocMissMatchCount = 0;
 
-        let totalPhysicalLocs = 0;
-        let totalSystemLocs = 0;
-        const allPhysicalLocations = new Set();
-        const allSystemLocations = new Set();
+        Object.entries(itemMap).forEach(([itemId, item]) => {
+            const locSet = new Set(item.rows.map(r => r.location));
 
-        allItemIds.forEach(itemId => {
-            const physical = physicalMap[itemId];
-            const system = systemMap[itemId];
+            // Count match/mismatch locations from the locationstatus column
+            let matchLocs = 0;
+            let missMatchLocs = 0;
+            item.rows.forEach(r => {
+                const st = r.locationStatus.toLowerCase();
+                if (st === 'match') {
+                    matchLocs++;
+                } else if (st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match') {
+                    missMatchLocs++;
+                }
+            });
 
-            const physicalLocCount = physical ? physical.locations.size : 0;
-            const systemLocCount = system ? system.locations.size : 0;
-            const name = (physical?.name || system?.name || itemId);
-            const category = physical?.category || 'Other';
+            // Overall product location status
+            const locStatus = missMatchLocs === 0 ? 'match' : 'mismatch';
 
-            // Determine location status (compare actual location values)
-            const physLocs = physical ? physical.locations : new Set();
-            const sysLocs = system ? system.locations : new Set();
-            const locsMatch = physLocs.size === sysLocs.size && [...physLocs].every(l => sysLocs.has(l));
-            const locStatus = locsMatch ? 'match' : 'mismatch';
+            // physicalDetails: every row acts as a physical detail (qtyphy = finalQty, qtysys = sysQty)
+            const physicalDetails = item.rows.map(r => ({
+                location: r.location,
+                finalQty: r.qtyPhy,
+                sysQty: r.qtySys,
+                locationStatus: r.locationStatus,
+                productStatus: r.productStatus,
+                date: r.date
+            }));
 
-            totalPhysicalLocs += physicalLocCount;
-            totalSystemLocs += systemLocCount;
+            // systemDetails: build per-location system qty from the same rows
+            const sysByLoc = {};
+            item.rows.forEach(r => {
+                if (!sysByLoc[r.location]) sysByLoc[r.location] = 0;
+                sysByLoc[r.location] += r.qtySys;
+            });
+            const systemDetails = Object.entries(sysByLoc).map(([loc, qty]) => ({
+                location: loc,
+                quantity: qty
+            }));
 
-            if (physical) physical.locations.forEach(l => allPhysicalLocations.add(l));
-            if (system) system.locations.forEach(l => allSystemLocations.add(l));
-
-            // Latest date from physical (scans)
+            // Latest date
             let latestDate = null;
-            if (physical?.details) {
-                physical.details.forEach(d => {
-                    if (d.date) {
-                        const dt = new Date(d.date);
-                        if (!latestDate || dt > latestDate) latestDate = dt;
-                    }
-                });
-            }
+            item.rows.forEach(r => {
+                if (r.date) {
+                    const dt = new Date(r.date);
+                    if (!latestDate || dt > latestDate) latestDate = dt;
+                }
+            });
 
-            const locPerItem = locPerItemsMap[itemId] || { matchLocs: 0, missMatchLocs: 0 };
+            totalLocMatchCount += matchLocs;
+            totalLocMissMatchCount += missMatchLocs;
 
             products.push({
                 itemId,
-                name,
-                category,
-                physicalLocations: physicalLocCount,
-                systemLocations: systemLocCount,
-                matchLocs: locPerItem.matchLocs,
-                missMatchLocs: locPerItem.missMatchLocs,
+                name: item.name || itemId,
+                category: item.category,
+                physicalLocations: locSet.size,
+                systemLocations: locSet.size,
+                matchLocs,
+                missMatchLocs,
                 locationStatus: locStatus,
-                physicalDetails: physical?.details || [],
-                systemDetails: system?.details || [],
+                physicalDetails,
+                systemDetails,
                 latestDate: latestDate ? latestDate.toISOString() : null
             });
         });
 
-        // 4. KPIs
+        // KPIs
         const totalProducts = products.length;
-        const matchProducts = products.filter(p => p.locationStatus === 'match').length;
-        const missMatchProducts = products.filter(p => p.locationStatus === 'mismatch').length;
 
-        // Parse "total location status" sheet for location KPIs
-        // Columns: date | Location | Extra | Missing | total miss match | Match | total locations
-        let sheetTotalLocations = 0;
-        let sheetLocMatch = 0;
-        let sheetLocMissMatch = 0;
-
-        if (totalLocStatusData && totalLocStatusData.length > 0) {
-            // Total locations = number of rows in the sheet
-            sheetTotalLocations = totalLocStatusData.length;
-            // Sum match and miss match from all rows
-            totalLocStatusData.forEach(row => {
-                sheetLocMatch += parseInt(findVal(row, ['match']) || 0) || 0;
-                sheetLocMissMatch += parseInt(findVal(row, ['totalmissmatch', 'totalmismatch']) || 0) || 0;
+        // Product Status KPIs: unique products from productstatus column
+        // A product is Match if ALL its rows have productstatus=Match, otherwise MissMatch
+        let prodStatusMatch = 0;
+        let prodStatusMissMatch = 0;
+        products.forEach(p => {
+            const hasMiss = (p.physicalDetails || []).some(d => {
+                const st = (d.productStatus || '').toLowerCase();
+                return st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match';
             });
-            console.log(`[Location] From 'total location status' sheet (${totalLocStatusData.length} rows): Total=${sheetTotalLocations}, Match=${sheetLocMatch}, MissMatch=${sheetLocMissMatch}`);
-        } else {
-            // Fallback to calculated values if sheet not available
-            sheetTotalLocations = new Set([...allPhysicalLocations, ...allSystemLocations]).size;
-            sheetLocMatch = [...allPhysicalLocations].filter(l => allSystemLocations.has(l)).length;
-            sheetLocMissMatch = [...allPhysicalLocations].filter(l => !allSystemLocations.has(l)).length + [...allSystemLocations].filter(l => !allPhysicalLocations.has(l)).length;
-            console.log(`[Location] 'total location status' sheet not found, using calculated values`);
-        }
+            if (hasMiss) prodStatusMissMatch++;
+            else prodStatusMatch++;
+        });
+
+        // Location Status KPIs: unique locations from locationstatus column
+        // A location is Match if ALL its rows have locationstatus=Match, otherwise MissMatch
+        const locStatusMap = {}; // { location: hasMiss }
+        products.forEach(p => {
+            (p.physicalDetails || []).forEach(d => {
+                const loc = d.location;
+                if (!loc) return;
+                const st = (d.locationStatus || '').toLowerCase();
+                const isMiss = st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match';
+                if (!(loc in locStatusMap)) locStatusMap[loc] = false;
+                if (isMiss) locStatusMap[loc] = true;
+            });
+        });
+        let locStatusMatch = 0;
+        let locStatusMissMatch = 0;
+        Object.values(locStatusMap).forEach(hasMiss => {
+            if (hasMiss) locStatusMissMatch++;
+            else locStatusMatch++;
+        });
 
         const kpis = {
             totalProducts,
-            rawPhysicalLocations: totalPhysicalLocs,
-            rawSystemLocations: totalSystemLocs,
-            rawTotalLocations: totalPhysicalLocs + totalSystemLocs,
-            totalPhysicalLocations: allPhysicalLocations.size,
-            totalSystemLocations: allSystemLocations.size,
-            totalLocations: sheetTotalLocations,
-            // Location-based match/miss match (from sheet)
-            locMatchCount: sheetLocMatch,
-            locMissMatchCount: sheetLocMissMatch,
-            // Product-based
-            matchCount: matchProducts,
-            missMatchCount2: missMatchProducts,
-            matchPercent: totalProducts > 0 ? Math.round((matchProducts / totalProducts) * 100) : 0,
-            missMatchPercent: totalProducts > 0 ? Math.round((missMatchProducts / totalProducts) * 100) : 0,
+            totalLocations: allLocations.size,
+            locMatchCount: locStatusMatch,
+            locMissMatchCount: locStatusMissMatch,
+            prodStatusMatch,
+            prodStatusMissMatch,
         };
 
-        console.log(`[Location] Analysis complete: ${totalProducts} products, Physical: ${totalPhysicalLocs}, System: ${totalSystemLocs}`);
-        console.log(`[Location] Match: ${sheetLocMatch}, MissMatch: ${sheetLocMissMatch}`);
+        console.log(`[Location] Analysis complete: ${totalProducts} products, ${allLocations.size} unique locations`);
+        console.log(`[Location] Location Match: ${totalLocMatchCount}, MissMatch: ${totalLocMissMatchCount}`);
 
         res.json({
             products,

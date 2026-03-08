@@ -420,15 +420,27 @@ function updateLocationDashboard(data) {
     updateEl('locTotalProducts', `${kpis.totalProducts || 0}`);
     updateEl('locTotalLocations', `${kpis.totalLocations || 0}`);
 
+    // Product Status KPIs (unique products from productstatus column)
+    const prodMatch = kpis.prodStatusMatch || 0;
+    const prodMissMatch = kpis.prodStatusMissMatch || 0;
+    const totalProds = prodMatch + prodMissMatch;
+    const prodMatchPct = totalProds > 0 ? Math.round((prodMatch / totalProds) * 100) : 0;
+    const prodMissMatchPct = totalProds > 0 ? Math.round((prodMissMatch / totalProds) * 100) : 0;
+    updateEl('locProdMatchCount', `${prodMatch} <span class="text-base text-slate-400 font-normal">/ ${totalProds}</span>`);
+    updateEl('locProdMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${prodMatchPct}%</span>`);
+    updateEl('locProdMissMatchCount', `${prodMissMatch} <span class="text-base text-slate-400 font-normal">/ ${totalProds}</span>`);
+    updateEl('locProdMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${prodMissMatchPct}%</span>`);
+
+    // Location Status KPIs (unique locations from locationstatus column)
     const locMatch = kpis.locMatchCount || 0;
     const locMissMatch = kpis.locMissMatchCount || 0;
-    const totalUniqueLocs = kpis.totalLocations || 0;
-    const locMatchPct = totalUniqueLocs > 0 ? Math.round((locMatch / totalUniqueLocs) * 100) : 0;
-    const locMissMatchPct = totalUniqueLocs > 0 ? Math.round((locMissMatch / totalUniqueLocs) * 100) : 0;
-    updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${totalUniqueLocs}</span>`);
-    updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${locMatchPct}%</span>`);
-    updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${totalUniqueLocs}</span>`);
-    updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${locMissMatchPct}%</span>`);
+    const totalLocs = locMatch + locMissMatch;
+    const locMatchPct = totalLocs > 0 ? Math.round((locMatch / totalLocs) * 100) : 0;
+    const locMissMatchPct = totalLocs > 0 ? Math.round((locMissMatch / totalLocs) * 100) : 0;
+    updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${totalLocs}</span>`);
+    updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-emerald-100 text-emerald-700">${locMatchPct}%</span>`);
+    updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${totalLocs}</span>`);
+    updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-orange-100 text-orange-700">${locMissMatchPct}%</span>`);
 
     // Render main table
     renderLocationTable(products, 'matchLocsDesc');
@@ -1310,36 +1322,41 @@ function showLocationsModal(productId) {
     const locationsListBody = document.getElementById('locationsListBody');
 
     const physicalLocs = productData.physicalDetails || [];
-    const systemLocs = productData.systemDetails || [];
 
-    // Build unique location sets
-    const physicalLocSet = new Set(physicalLocs.map(d => d.location));
-    const systemLocSet = new Set(systemLocs.map(d => d.location));
+    // Group by location, determine match/miss match from locationStatus column
+    const locMap = {}; // { location: { rows: [], hasMiss: false } }
+    physicalLocs.forEach(d => {
+        const loc = d.location || 'Unknown';
+        if (!locMap[loc]) locMap[loc] = { rows: [], hasMiss: false };
+        locMap[loc].rows.push(d);
+        const st = (d.locationStatus || '').toLowerCase();
+        if (st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match') {
+            locMap[loc].hasMiss = true;
+        }
+    });
 
-    // Compare: same vs different
-    const sameLocs = [...physicalLocSet].filter(loc => systemLocSet.has(loc));
-    const physicalOnlyLocs = [...physicalLocSet].filter(loc => !systemLocSet.has(loc));
-    const systemOnlyLocs = [...systemLocSet].filter(loc => !physicalLocSet.has(loc));
+    const matchLocEntries = Object.entries(locMap).filter(([, v]) => !v.hasMiss);
+    const missMatchLocEntries = Object.entries(locMap).filter(([, v]) => v.hasMiss);
 
     // Compute QTY totals & variance
     const totalFinalQty = physicalLocs.reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
-    const totalSysQty = systemLocs.reduce((s, d) => s + (parseFloat(d.quantity) || 0), 0);
+    const totalSysQty = physicalLocs.reduce((s, d) => s + (parseFloat(d.sysQty) || 0), 0);
     const qtyVariance = totalFinalQty - totalSysQty;
     const varianceColor = qtyVariance === 0 ? 'text-green-700' : qtyVariance > 0 ? 'text-orange-700' : 'text-red-700';
     const varianceSign = qtyVariance > 0 ? '+' : '';
 
-    // Summary header with comparison KPIs
+    // Summary header
     const summaryHtml = `
         <div class="flex flex-col gap-3 mb-4 p-3 bg-slate-100 rounded-lg">
             <div class="flex justify-center items-center gap-4">
                 <div class="text-center">
                     <span class="text-sm font-semibold text-green-600">Match Locs</span>
-                    <span class="text-2xl font-bold text-green-700 block">${productData.matchLocs}</span>
+                    <span class="text-2xl font-bold text-green-700 block">${matchLocEntries.length}</span>
                 </div>
                 <span class="text-slate-400 text-xl">vs</span>
                 <div class="text-center">
                     <span class="text-sm font-semibold text-red-600">Miss Match Locs</span>
-                    <span class="text-2xl font-bold text-red-700 block">${productData.missMatchLocs}</span>
+                    <span class="text-2xl font-bold text-red-700 block">${missMatchLocEntries.length}</span>
                 </div>
             </div>
             <div class="flex justify-center items-center gap-4 mt-1">
@@ -1366,58 +1383,46 @@ function showLocationsModal(productId) {
         </div>
     `;
 
-    // Match locations (exist in both Physical & System)
+    // Helper to render a location entry
+    const renderLocEntry = ([loc, data], bgClass, borderClass) => {
+        const pQty = data.rows.reduce((s, d) => s + (parseFloat(d.finalQty) || 0), 0);
+        const sQty = data.rows.reduce((s, d) => s + (parseFloat(d.sysQty) || 0), 0);
+        const locVar = pQty - sQty;
+        const locVarColor = locVar === 0 ? 'text-green-700' : locVar > 0 ? 'text-orange-700' : 'text-red-700';
+        const locVarSign = locVar > 0 ? '+' : '';
+        const locStatus = data.rows.map(d => d.locationStatus).find(s => s && s.toLowerCase() !== 'match') || 'Match';
+        const statusBadge = locStatus.toLowerCase() === 'match'
+            ? ''
+            : `<span class="ml-2 px-2 py-0.5 text-xs font-bold rounded bg-red-100 text-red-700">${locStatus}</span>`;
+        return `
+            <div class="p-3 ${bgClass} border ${borderClass} rounded-lg mb-2">
+                <p class="font-semibold text-slate-800 mb-1">${loc}${statusBadge}</p>
+                <div class="flex gap-4 text-sm">
+                    <span class="text-cyan-700 font-bold">Physical Qty: ${pQty}</span>
+                    <span class="text-purple-700 font-bold">System Qty: ${sQty}</span>
+                    <span class="${locVarColor} font-bold">Var: ${locVarSign}${locVar}</span>
+                </div>
+            </div>`;
+    };
+
+    // Match locations
     let matchHtml = '';
-    if (sameLocs.length > 0) {
+    if (matchLocEntries.length > 0) {
         matchHtml = `
             <div class="mb-3">
-                <h4 class="text-sm font-bold text-green-600 mb-2">Match Locations (${productData.matchLocs})</h4>
-                ${sameLocs.map(loc => {
-                    const pQty = physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0);
-                    const sQty = systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
-                    const locVar = pQty - sQty;
-                    const locVarColor = locVar === 0 ? 'text-green-700' : locVar > 0 ? 'text-orange-700' : 'text-red-700';
-                    const locVarSign = locVar > 0 ? '+' : '';
-                    return `
-                    <div class="p-3 bg-green-50 border border-green-100 rounded-lg mb-2">
-                        <p class="font-semibold text-slate-800 mb-1">${loc}</p>
-                        <div class="flex gap-4 text-sm">
-                            <span class="text-cyan-700 font-bold">Physical Qty: ${pQty}</span>
-                            <span class="text-purple-700 font-bold">System Qty: ${sQty}</span>
-                            <span class="${locVarColor} font-bold">Var: ${locVarSign}${locVar}</span>
-                        </div>
-                    </div>`;
-                }).join('')}
+                <h4 class="text-sm font-bold text-green-600 mb-2">Match Locations (${matchLocEntries.length})</h4>
+                ${matchLocEntries.map(entry => renderLocEntry(entry, 'bg-green-50', 'border-green-100')).join('')}
             </div>
         `;
     }
 
-    // Miss Match locations (in one side only)
-    const missMatchLocs = [
-        ...physicalOnlyLocs.map(loc => ({ loc, source: 'Physical Only' })),
-        ...systemOnlyLocs.map(loc => ({ loc, source: 'System Only' }))
-    ];
+    // Miss Match locations
     let missMatchHtml = '';
-    if (missMatchLocs.length > 0) {
+    if (missMatchLocEntries.length > 0) {
         missMatchHtml = `
             <div class="mb-3">
-                <h4 class="text-sm font-bold text-red-600 mb-2">Miss Match Locations (${productData.missMatchLocs})</h4>
-                ${missMatchLocs.map(({ loc, source }) => {
-                    const isPhysical = source === 'Physical Only';
-                    const qty = isPhysical
-                        ? physicalLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.finalQty || 0), 0)
-                        : systemLocs.filter(d => d.location === loc).reduce((s, d) => s + (d.quantity || 0), 0);
-                    return `
-                    <div class="p-3 bg-red-50 border border-red-100 rounded-lg mb-2">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="font-semibold text-slate-800">${loc}</p>
-                                <span class="text-xs font-bold ${isPhysical ? 'text-cyan-600' : 'text-purple-600'}">${source}</span>
-                            </div>
-                            <span class="text-sm font-bold text-slate-700">Qty: ${qty}</span>
-                        </div>
-                    </div>`;
-                }).join('')}
+                <h4 class="text-sm font-bold text-red-600 mb-2">Miss Match Locations (${missMatchLocEntries.length})</h4>
+                ${missMatchLocEntries.map(entry => renderLocEntry(entry, 'bg-red-50', 'border-red-100')).join('')}
             </div>
         `;
     }
@@ -1468,6 +1473,21 @@ setInterval(() => {
 // Location Table Render Function
 function renderLocationTable(data, sortBy = 'matchLocsDesc') {
     const locationTable = document.getElementById('locationDetailsTable');
+
+    // Update productLocationsData with current (possibly filtered) data
+    data.forEach(p => {
+        window.productLocationsData[p.itemId] = {
+            name: p.name,
+            category: p.category,
+            physicalLocations: p.physicalLocations,
+            systemLocations: p.systemLocations,
+            matchLocs: p.matchLocs || 0,
+            missMatchLocs: p.missMatchLocs || 0,
+            locationStatus: p.locationStatus,
+            physicalDetails: p.physicalDetails || [],
+            systemDetails: p.systemDetails || []
+        };
+    });
 
     let sortedData = [...data];
 
@@ -1550,34 +1570,60 @@ function updateLocationKPIs(filtered) {
     };
 
     const totalProducts = filtered.length;
-    let totalPhysLocs = 0, totalSysLocs = 0;
-    const allPhysLocs = new Set();
-    const allSysLocs = new Set();
-
+    const allLocs = new Set();
     filtered.forEach(p => {
-        const physSet = new Set((p.physicalDetails || []).map(d => d.location));
-        const sysSet = new Set((p.systemDetails || []).map(d => d.location));
-        totalPhysLocs += physSet.size;
-        totalSysLocs += sysSet.size;
-        physSet.forEach(l => allPhysLocs.add(l));
-        sysSet.forEach(l => allSysLocs.add(l));
+        (p.physicalDetails || []).forEach(d => allLocs.add(d.location));
     });
+    const uniqueAll = allLocs.size;
 
-    const uniqueAll = new Set([...allPhysLocs, ...allSysLocs]).size;
-    const locMatch = [...allPhysLocs].filter(l => allSysLocs.has(l)).length;
-    const locMissMatch = [...allPhysLocs].filter(l => !allSysLocs.has(l)).length + [...allSysLocs].filter(l => !allPhysLocs.has(l)).length;
-    const locMatchPct = uniqueAll > 0 ? Math.round((locMatch / uniqueAll) * 100) : 0;
-    const locMissMatchPct = uniqueAll > 0 ? Math.round((locMissMatch / uniqueAll) * 100) : 0;
+    // Product Status KPIs (filtered - unique products from productstatus column)
+    let prodMatchFiltered = 0, prodMissMatchFiltered = 0;
+    filtered.forEach(p => {
+        const hasMiss = (p.physicalDetails || []).some(d => {
+            const st = (d.productStatus || '').toLowerCase();
+            return st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match';
+        });
+        if (hasMiss) prodMissMatchFiltered++;
+        else prodMatchFiltered++;
+    });
+    const totalProds = prodMatchFiltered + prodMissMatchFiltered;
+    const prodMatchPct = totalProds > 0 ? Math.round((prodMatchFiltered / totalProds) * 100) : 0;
+    const prodMissMatchPct = totalProds > 0 ? Math.round((prodMissMatchFiltered / totalProds) * 100) : 0;
 
     updateEl('locTotalProducts', `${totalProducts}`);
     updateEl('locTotalLocations', `${uniqueAll}`);
-    updateEl('locMatchCount', `${locMatch} <span class="text-base text-slate-400 font-normal">/ ${uniqueAll}</span>`);
-    updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${locMatchPct}%</span>`);
-    updateEl('locMissMatchCount', `${locMissMatch} <span class="text-base text-slate-400 font-normal">/ ${uniqueAll}</span>`);
-    updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${locMissMatchPct}%</span>`);
+    updateEl('locProdMatchCount', `${prodMatchFiltered} <span class="text-base text-slate-400 font-normal">/ ${totalProds}</span>`);
+    updateEl('locProdMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-green-100 text-green-700">${prodMatchPct}%</span>`);
+    updateEl('locProdMissMatchCount', `${prodMissMatchFiltered} <span class="text-base text-slate-400 font-normal">/ ${totalProds}</span>`);
+    updateEl('locProdMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-red-100 text-red-700">${prodMissMatchPct}%</span>`);
+
+    // Location Status KPIs (filtered - unique locations from locationstatus column)
+    const locStatusMap = {};
+    filtered.forEach(p => {
+        (p.physicalDetails || []).forEach(d => {
+            const loc = d.location;
+            if (!loc) return;
+            const st = (d.locationStatus || '').toLowerCase();
+            const isMiss = st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match';
+            if (!(loc in locStatusMap)) locStatusMap[loc] = false;
+            if (isMiss) locStatusMap[loc] = true;
+        });
+    });
+    let locMatchFiltered = 0, locMissMatchFiltered = 0;
+    Object.values(locStatusMap).forEach(hasMiss => {
+        if (hasMiss) locMissMatchFiltered++;
+        else locMatchFiltered++;
+    });
+    const totalLocs = locMatchFiltered + locMissMatchFiltered;
+    const locMatchPctF = totalLocs > 0 ? Math.round((locMatchFiltered / totalLocs) * 100) : 0;
+    const locMissMatchPctF = totalLocs > 0 ? Math.round((locMissMatchFiltered / totalLocs) * 100) : 0;
+    updateEl('locMatchCount', `${locMatchFiltered} <span class="text-base text-slate-400 font-normal">/ ${totalLocs}</span>`);
+    updateEl('locMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-emerald-100 text-emerald-700">${locMatchPctF}%</span>`);
+    updateEl('locMissMatchCount', `${locMissMatchFiltered} <span class="text-base text-slate-400 font-normal">/ ${totalLocs}</span>`);
+    updateEl('locMissMatchPercent', `<span class="inline-block px-2.5 py-1 text-sm font-bold rounded-full bg-orange-100 text-orange-700">${locMissMatchPctF}%</span>`);
 
     // Also update chart
-    updateLocationStatusChart({ matchCount: locMatch, missMatchCount: locMissMatch });
+    updateLocationStatusChart({ matchCount: locMatchFiltered, missMatchCount: locMissMatchFiltered });
 }
 
 function setupLocationFilters() {
@@ -1616,34 +1662,72 @@ function setupLocationFilters() {
         const dateFromVal = dateFromInput?.value || '';
         const dateToVal = dateToInput?.value || '';
 
-        // Parse date boundaries as YYYY-MM-DD strings for safe comparison
-        // (avoids timezone issues with Date objects)
+        const hasDateFilter = !!(dateFromVal || dateToVal);
 
-        let filtered = window.locationTableFullData.filter(item => {
+        // Helper: check if a row's date falls within range
+        const dateInRange = (d) => {
+            if (!d.date) return false;
+            const dateStr = d.date.substring(0, 10); // YYYY-MM-DD from ISO
+            if (dateFromVal && dateStr < dateFromVal) return false;
+            if (dateToVal && dateStr > dateToVal) return false;
+            return true;
+        };
+
+        let filtered = [];
+
+        window.locationTableFullData.forEach(item => {
             const matchesProduct = !productTerm || (item.name || '').toLowerCase().includes(productTerm);
             const matchesId = !idTerm || (item.itemId || '').toLowerCase().includes(idTerm);
             const matchesCategory = categoryVal === 'all' || item.category === categoryVal;
-            const matchesStatus = statusVal === 'all' || (statusVal === 'missmatch' ? item.locationStatus === 'mismatch' : item.locationStatus === statusVal);
 
-            // Date filter: check if any physical detail date falls in range
-            let matchesDate = true;
-            if (dateFromVal || dateToVal) {
-                const details = item.physicalDetails || [];
-                if (details.length === 0) {
-                    matchesDate = false;
-                } else {
-                    matchesDate = details.some(d => {
-                        if (!d.date) return false;
-                        // Extract YYYY-MM-DD from ISO string for safe comparison
-                        const dateStr = d.date.substring(0, 10);
-                        if (dateFromVal && dateStr < dateFromVal) return false;
-                        if (dateToVal && dateStr > dateToVal) return false;
-                        return true;
-                    });
-                }
+            if (!matchesProduct || !matchesId || !matchesCategory) return;
+
+            // Row-level date filter: keep only physicalDetails rows matching the date range
+            let filteredDetails = item.physicalDetails || [];
+            if (hasDateFilter) {
+                filteredDetails = filteredDetails.filter(dateInRange);
+                if (filteredDetails.length === 0) return; // no rows match date → skip product
             }
 
-            return matchesProduct && matchesId && matchesCategory && matchesStatus && matchesDate;
+            // Recalculate matchLocs / missMatchLocs from filtered rows
+            let matchLocs = 0;
+            let missMatchLocs = 0;
+            filteredDetails.forEach(d => {
+                const st = (d.locationStatus || '').toLowerCase();
+                if (st === 'match') matchLocs++;
+                else if (st === 'extra' || st === 'missing' || st === 'mismatch' || st === 'miss match') missMatchLocs++;
+            });
+
+            // Recalculate locationStatus from filtered rows
+            const locStatus = missMatchLocs === 0 ? 'match' : 'mismatch';
+
+            // Status filter (applied after recalculating)
+            const matchesStatus = statusVal === 'all' || (statusVal === 'missmatch' ? locStatus === 'mismatch' : locStatus === statusVal);
+            if (!matchesStatus) return;
+
+            // Recalculate systemDetails from filtered rows
+            const sysByLoc = {};
+            filteredDetails.forEach(d => {
+                const loc = d.location;
+                if (!sysByLoc[loc]) sysByLoc[loc] = 0;
+                sysByLoc[loc] += parseFloat(d.sysQty) || 0;
+            });
+            const filteredSystemDetails = Object.entries(sysByLoc).map(([loc, qty]) => ({
+                location: loc,
+                quantity: qty
+            }));
+
+            // Build a filtered copy of the product
+            filtered.push({
+                ...item,
+                physicalDetails: filteredDetails,
+                systemDetails: filteredSystemDetails,
+                matchLocs,
+                missMatchLocs,
+                locationStatus: locStatus,
+                physicalLocations: new Set(filteredDetails.map(d => d.location)).size,
+                systemLocations: new Set(filteredDetails.map(d => d.location)).size
+            });
         });
 
         renderLocationTable(filtered, sortVal);
